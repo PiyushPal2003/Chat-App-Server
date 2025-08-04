@@ -4,6 +4,7 @@ const cors = require('cors');
 const router = require('./routes');
 const http = require('http');
 const userdb = require('./models/userschema');
+const cookieParser = require('cookie-parser')
 const admin = require("firebase-admin");
 const serviceAccount = require("./serviceAccountKey.json");
 
@@ -14,6 +15,7 @@ admin.initializeApp({
 // var bucket = admin.storage().bucket();
 
 const app = express();
+app.use(cookieParser());
 app.use(cors({
     origin: 'http://localhost:5173',
     credentials: true,
