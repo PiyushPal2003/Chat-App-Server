@@ -1,5 +1,6 @@
 const path = require("path");
 const fs = require("fs");
+const bcrypt = require('bcryptjs');
 const userdb = require('../models/userschema');
 var jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
@@ -26,6 +27,7 @@ const authRegister = async(req, res) => {
         const file = req.file;
         if(file){
             const destination = `ChatAppUsersProfilePhoto/${req.body.name}_${req.body.email}_${Date.now()}`;
+
 
             await bucket.upload(file.path, {
             destination: destination,
@@ -128,7 +130,7 @@ const authLogin = async(req, res)=>{
     try{
         const refreshToken = req.cookies.chatRefreshToken;
 
-        const user = userdb.findone({email: req.body.email})
+        const user = await userdb.findOne({email: req.body.email})
         if(!user){
             return res.status(400).json({error: "User not found"});
         }
@@ -173,7 +175,7 @@ const googleLoginAuth = async(req,res)=>{
         const refreshToken = req.cookies.chatRefreshToken;
         const payload = await verifyGoogleToken(req.body.googleAuthToken);
         
-        const user = userdb.findone({email: payload.email})
+        const user = userdb.findOne({email: payload.email})
         if(!user){
             return res.status(400).json({error: "User not found"});
         }
@@ -204,4 +206,4 @@ const googleLoginAuth = async(req,res)=>{
 }
 
 
-module.exports = {authRegister, googleauth}
+module.exports = {authRegister, googleauth, authLogin, googleLoginAuth}
