@@ -23,6 +23,11 @@ const authRegister = async(req, res) => {
         const admin = require("firebase-admin");
         const bucket = admin.storage().bucket();
         let publicUrl;
+
+        const usr = await userdb.findOne({email: req.body.email})
+        if(usr){
+            return res.status(201).json({message: "already registered"});
+        }
         
         const file = req.file;
         if(file){
@@ -80,6 +85,11 @@ const authRegister = async(req, res) => {
 const googleauth = async(req, res) => {
     try{
         const payload = await verifyGoogleToken(req.body.googleAuthToken);
+        
+        const usr = await userdb.findOne({email: payload.email})
+        if(usr){
+            return res.status(201).json({error: "already registered"});
+        }
 
         const refreshToken = jwt.sign({ name: payload.name, email: payload.email, photo: payload.picture, type: 'Refresh' }, process.env.JWT_SECRET);
         
@@ -134,6 +144,11 @@ const authLogin = async(req, res)=>{
         if(!user){
             return res.status(400).json({error: "User not found"});
         }
+        else if(!user.password){
+            return res.status(201).json({
+                message: "Other method",
+            });
+        }
 
         bcrypt.compare(req.body.password, user.password, (err, result) => {
             if (err) {
@@ -175,7 +190,7 @@ const googleLoginAuth = async(req,res)=>{
         const refreshToken = req.cookies.chatRefreshToken;
         const payload = await verifyGoogleToken(req.body.googleAuthToken);
         
-        const user = userdb.findOne({email: payload.email})
+        const user = await userdb.findOne({email: payload.email})
         if(!user){
             return res.status(400).json({error: "User not found"});
         }
