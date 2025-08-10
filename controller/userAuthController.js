@@ -47,7 +47,7 @@ const authRegister = async(req, res) => {
             publicUrl = `https://storage.googleapis.com/${bucket.name}/${destination}`;
         }
 
-        const refreshToken = jwt.sign({ name: req.body.name, email: req.body.email, photo: publicUrl ? publicUrl : 'NA', type: 'Refresh' }, process.env.JWT_SECRET);
+        const refreshToken = jwt.sign({ name: req.body.name, email: req.body.email, photo: publicUrl ? publicUrl : 'NA', type: 'Refresh' }, process.env.JWT_SECRET, {expiresIn: '7d'});
         const accessToken = jwt.sign({ name: req.body.name, email: req.body.email, photo: publicUrl ? publicUrl : 'NA', type: 'Access' }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
         const user = new userdb({
@@ -65,6 +65,7 @@ const authRegister = async(req, res) => {
                     secure: false,
                     sameSite: 'LAX', 
                     path: '/',
+                    maxage: 7 * 24 * 60 * 60 * 1000
                 });
 
                 return res.status(200).json({message: "User Created Successfully", 
@@ -91,7 +92,7 @@ const googleauth = async(req, res) => {
             return res.status(201).json({error: "already registered"});
         }
 
-        const refreshToken = jwt.sign({ name: payload.name, email: payload.email, photo: payload.picture, type: 'Refresh' }, process.env.JWT_SECRET);
+        const refreshToken = jwt.sign({ name: payload.name, email: payload.email, photo: payload.picture, type: 'Refresh' }, process.env.JWT_SECRET, {expiresIn: '7d'});
         
         const accessToken = jwt.sign({ name: payload.name, email: payload.email, photo: payload.picture, type: 'Access' }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
@@ -109,6 +110,7 @@ const googleauth = async(req, res) => {
                     secure: false,
                     sameSite: 'LAX', 
                     path: '/',
+                    maxAge: 7 * 24 * 60 * 60 * 1000
                 });
 
                 return res.status(200).json({message: "Google Auth Success, User created", 
@@ -167,6 +169,7 @@ const authLogin = async(req, res)=>{
                     secure: false,
                     sameSite: 'LAX', 
                     path: '/',
+                    maxAge: 7 * 24 * 60 * 60 * 1000
                 });
             }
 
@@ -203,6 +206,7 @@ const googleLoginAuth = async(req,res)=>{
                 secure: false,
                 sameSite: 'LAX', 
                 path: '/',
+                maxAge: 7 * 24 * 60 * 60 * 1000
             });
         }
 
