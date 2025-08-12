@@ -11,4 +11,7 @@ router.post('/auth/googleregister', userAuthController.googleauth);
 router.post('/auth/login', upload.single('profilePhoto'), userAuthController.authLogin);
 router.post('/auth/googlelogin', userAuthController.googleLoginAuth);
 
+//Refresh Token
+router.get('/auth/refresh', userAuthController.refreshToken);
+
 module.exports = router;
