@@ -227,35 +227,44 @@ const googleLoginAuth = async(req,res)=>{
 
 
 // Refresh Token Controller
-const refreshToken = async(req, res) => {
-    const refreshToken = req.cookies.chatRefreshToken;
-    if (!refreshToken) {
-        return res.status(401).json({ error: 'No refresh token provided' });
-    }
-    try{
-        jwt.verify(refreshToken, process.env.JWT_SECRET, (err, decoded) => {
-            if (err) {
-                console.error('Invalid refresh token:', err);
-                return res.status(403).json({ error: 'Invalid refresh token' });
-            }
-            const newAccessToken = jwt.sign({ name: decoded.name, email: decoded.email, photo: decoded.photo, type: 'Access' }, process.env.JWT_SECRET, { expiresIn: '1h' });
+const refreshToken = async (req, res) => {
+  const refreshToken = req.cookies.chatRefreshToken;
+  console.log(refreshToken);
+  if (!refreshToken) {
+    return res.status(401).json({ error: "No refresh token provided" });
+  }
+  try {
+    jwt.verify(refreshToken, process.env.JWT_SECRET, (err, decoded) => {
+      if (err) {
+        console.error("Invalid refresh token:", err);
+        return res.status(403).json({ error: "Invalid refresh token" });
+      }
+      const newAccessToken = jwt.sign(
+        {
+          name: decoded.name,
+          email: decoded.email,
+          photo: decoded.photo,
+          type: "Access",
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: "1h" }
+      );
 
-            return res.status(200).json({
-                message: 'Token refreshed successfully',
-                accessToken: newAccessToken,
-                user: {
-                    name: decoded.name,
-                    email: decoded.email,
-                    profilePhoto: decoded.photo
-                } 
-            })
-        })
-    }
-    catch (error) {
-        console.error('Refresh Token Error:', error);
-        return res.status(500).json({ error: 'Server error', details: error.message });
-    }
-}
+      return res.status(200).json({
+        message: "Token refreshed successfully",
+        accessToken: newAccessToken,
+        user: {
+          name: decoded.name,
+          email: decoded.email,
+          profilePhoto: decoded.photo,
+        },
+      });
+    });
+  } catch (error) {
+    console.error("Refresh Token Error:", error);
+    return res.status(500).json({ error: "Server error", details: error.message });
+  }
+};
 
 
-module.exports = {authRegister, googleauth, authLogin, googleLoginAuth}
+module.exports = {authRegister, googleauth, authLogin, googleLoginAuth, refreshToken}
