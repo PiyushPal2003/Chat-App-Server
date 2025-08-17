@@ -68,6 +68,7 @@ const authRegister = async(req, res) => {
                     maxage: 7 * 24 * 60 * 60 * 1000
                 });
 
+                io.emit('NEW_USER', user);
                 return res.status(200).json({message: "User Created Successfully", 
                                 accessToken: accessToken,
                                 user: { 
