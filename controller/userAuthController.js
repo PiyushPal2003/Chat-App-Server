@@ -268,4 +268,40 @@ const refreshToken = async (req, res) => {
 };
 
 
-module.exports = {authRegister, googleauth, authLogin, googleLoginAuth, refreshToken}
+//Socket Cookie Authenticator
+const socketAuthenticator = async(err, socket, next)=>{
+    try{
+        if (err) return next(err);
+
+        const refreshToken = socket.request.cookies['chatRefreshToken']; 
+
+        if (!refreshToken) {
+            return res.status(401).json({ error: "No refresh token provided" });
+        }
+
+        jwt.verify(refreshToken, process.env.JWT_SECRET, (err, decoded) => {
+            if (err) {
+                console.error("Invalid refresh token:", err);
+                return res.status(403).json({ error: "Invalid refresh token" });
+            }
+
+            const user = userdb.findOne({email: decoded.email});
+            if(!user){
+                console.error("User not found with email: ", decoded.email);
+                return res.status(403).json({ error: "User not found" });
+            }
+            
+            socket.user = user;
+            return next();
+
+        });
+        
+    }
+    catch(err){
+        console.log(err);
+        return res.status(400).json({message: 'Refresh Token not verified', error: err})
+    }
+}
+
+
+module.exports = {authRegister, googleauth, authLogin, googleLoginAuth, refreshToken, socketAuthenticator}
