@@ -276,19 +276,19 @@ const socketAuthenticator = async(err, socket, next)=>{
         const refreshToken = socket.request.cookies['chatRefreshToken']; 
 
         if (!refreshToken) {
-            return res.status(401).json({ error: "No refresh token provided" });
+            return next(new Error("No refresh token provided"));
         }
 
         jwt.verify(refreshToken, process.env.JWT_SECRET, (err, decoded) => {
             if (err) {
                 console.error("Invalid refresh token:", err);
-                return res.status(403).json({ error: "Invalid refresh token" });
+                return next(new Error("Invalid refresh token"));
             }
 
             const user = userdb.findOne({email: decoded.email});
             if(!user){
                 console.error("User not found with email: ", decoded.email);
-                return res.status(403).json({ error: "User not found" });
+                return next(new Error("User not found"));
             }
             
             socket.user = user;
