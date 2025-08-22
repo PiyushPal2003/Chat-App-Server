@@ -8,7 +8,7 @@ const cookieParser = require('cookie-parser')
 const admin = require("firebase-admin");
 const { Server } = require("socket.io");
 const serviceAccount = require("./serviceAccountKey.json");
-import {socketAuthenticator} from './controller/userAuthController';
+const {socketAuthenticator} = require('./controller/userAuthController.js');
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
@@ -54,6 +54,7 @@ const userSocketIDs = new Map();
 io.on("connection", (socket) => {
   console.log("A user connected:", socket.id);
   userSocketIDs.set(socket.user._id.toString(), socket.id);
+  console.log("Current User socket IDs are:", userSocketIDs);
 
 
   socket.on("disconnect", () => {

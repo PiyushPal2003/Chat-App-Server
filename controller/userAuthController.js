@@ -279,13 +279,13 @@ const socketAuthenticator = async(err, socket, next)=>{
             return next(new Error("No refresh token provided"));
         }
 
-        jwt.verify(refreshToken, process.env.JWT_SECRET, (err, decoded) => {
+        jwt.verify(refreshToken, process.env.JWT_SECRET, async(err, decoded) => {
             if (err) {
                 console.error("Invalid refresh token:", err);
                 return next(new Error("Invalid refresh token"));
             }
 
-            const user = userdb.findOne({email: decoded.email});
+            const user = await userdb.findOne({email: decoded.email});
             if(!user){
                 console.error("User not found with email: ", decoded.email);
                 return next(new Error("User not found"));

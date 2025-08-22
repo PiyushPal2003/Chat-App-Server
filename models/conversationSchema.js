@@ -25,13 +25,14 @@ const conversationSchema = new mongoose.Schema({
   },
   grpname: {
     type: String,
+    default: 'Welcome to your Group Chat',
     required: function(v){
         return this.members && this.members.length > 2;
     }
   },
   description: {
     type: String,
-    default: `${this.grpname}`,
+    default: 'This is you chat',
     required: function () {
       return this.members && this.members.length > 2;
     },
