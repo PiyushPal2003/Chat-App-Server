@@ -47,16 +47,19 @@ const authRegister = async(req, res) => {
             publicUrl = `https://storage.googleapis.com/${bucket.name}/${destination}`;
         }
 
-        const refreshToken = jwt.sign({ name: req.body.name, email: req.body.email, photo: publicUrl ? publicUrl : 'NA', type: 'Refresh' }, process.env.JWT_SECRET, {expiresIn: '7d'});
-        const accessToken = jwt.sign({ name: req.body.name, email: req.body.email, photo: publicUrl ? publicUrl : 'NA', type: 'Access' }, process.env.JWT_SECRET, { expiresIn: '1h' });
-
+        
         const user = new userdb({
             name: req.body.name,
             email: req.body.email,
             profilePhoto: publicUrl ? publicUrl : 'NA',
             password: req.body.password,
-            refreshToken: refreshToken
+            // refreshToken: refreshToken
         });
+        
+        const refreshToken = jwt.sign({ name: req.body.name, email: req.body.email, photo: publicUrl ? publicUrl : 'NA', id : user._id, type: 'Refresh' }, process.env.JWT_SECRET, {expiresIn: '7d'});
+        const accessToken = jwt.sign({ name: req.body.name, email: req.body.email, photo: publicUrl ? publicUrl : 'NA', id : user._id, type: 'Access' }, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+        user.refreshToken = refreshToken;
 
         user.save()
             .then(() => {
@@ -68,13 +71,15 @@ const authRegister = async(req, res) => {
                     maxage: 7 * 24 * 60 * 60 * 1000
                 });
 
-                io.emit('NEW_USER', user);
+                // io.emit('NEW_USER', user);
                 return res.status(200).json({message: "User Created Successfully", 
                                 accessToken: accessToken,
                                 user: { 
                                     name: req.body.name,
                                     email: req.body.email,
-                                    profilePhoto: publicUrl ? publicUrl : 'NA' }
+                                    profilePhoto: publicUrl ? publicUrl : 'NA',
+                                    id: user._id,
+                                }
                                 });
             })
             .catch((error) => {
@@ -93,16 +98,19 @@ const googleauth = async(req, res) => {
             return res.status(201).json({error: "already registered"});
         }
 
-        const refreshToken = jwt.sign({ name: payload.name, email: payload.email, photo: payload.picture, type: 'Refresh' }, process.env.JWT_SECRET, {expiresIn: '7d'});
         
-        const accessToken = jwt.sign({ name: payload.name, email: payload.email, photo: payload.picture, type: 'Access' }, process.env.JWT_SECRET, { expiresIn: '1h' });
-
         const user = new userdb({
             name: payload.name,
             email: payload.email,
             profilePhoto: payload.picture ? payload.picture : 'NA',
-            refreshToken: refreshToken
+            // refreshToken: refreshToken
         });
+
+        const refreshToken = jwt.sign({ name: payload.name, email: payload.email, photo: payload.picture, id : user._id, type: 'Refresh' }, process.env.JWT_SECRET, {expiresIn: '7d'});
+        
+        const accessToken = jwt.sign({ name: payload.name, email: payload.email, photo: payload.picture, id : user._id, type: 'Access' }, process.env.JWT_SECRET, { expiresIn: '1h' });
+
+        user.refreshToken = refreshToken;
 
         user.save()
             .then(() => {
@@ -119,7 +127,9 @@ const googleauth = async(req, res) => {
                         user: { 
                             name: payload.name,
                             email: payload.email,
-                            profilePhoto: payload.picture }
+                            profilePhoto: payload.picture, 
+                            id: user._id,
+                        }
                         });
             })
             .catch((error) => {
@@ -162,7 +172,7 @@ const authLogin = async(req, res)=>{
                 return res.status(401).json({ error: 'Invalid password' });
             }
 
-            const accessToken = jwt.sign({ name: user.name, email: user.email, photo: user.profilePhoto, type: 'Access' }, process.env.JWT_SECRET, { expiresIn: '1h' });
+            const accessToken = jwt.sign({ name: user.name, email: user.email, photo: user.profilePhoto, id: user._id, type: 'Access' }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
             if (!refreshToken) {
                 res.cookie('chatRefreshToken', user.refreshToken, {
@@ -177,7 +187,8 @@ const authLogin = async(req, res)=>{
             return res.status(200).json({ message: 'Login successful', token: accessToken, user: {
                 name: user.name,
                 email: user.email,
-                profilePhoto: user.profilePhoto
+                profilePhoto: user.profilePhoto,
+                id: user._id,
             }});
         })  
     }
@@ -199,7 +210,7 @@ const googleLoginAuth = async(req,res)=>{
             return res.status(400).json({error: "User not found"});
         }
         
-        const accessToken = jwt.sign({ name: payload.name, email: payload.email, photo: payload.picture, type: 'Access' }, process.env.JWT_SECRET, { expiresIn: '1h' });
+        const accessToken = jwt.sign({ name: payload.name, email: payload.email, photo: payload.picture, id: user._id, type: 'Access' }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
         if (!refreshToken) {
             res.cookie('chatRefreshToken', user.refreshToken, {
@@ -214,7 +225,8 @@ const googleLoginAuth = async(req,res)=>{
         return res.status(200).json({ message: 'Login successful', token: accessToken, user: {
                 name: user.name,
                 email: user.email,
-                profilePhoto: user.profilePhoto
+                profilePhoto: user.profilePhoto,
+                id: user._id,
         }}
     );
 
@@ -245,7 +257,8 @@ const refreshToken = async (req, res) => {
           name: decoded.name,
           email: decoded.email,
           photo: decoded.photo,
-          type: "Access",
+          id: decoded.id,
+          type: "Access"
         },
         process.env.JWT_SECRET,
         { expiresIn: "1h" }
@@ -258,6 +271,7 @@ const refreshToken = async (req, res) => {
           name: decoded.name,
           email: decoded.email,
           profilePhoto: decoded.photo,
+          id: decoded.id,
         },
       });
     });

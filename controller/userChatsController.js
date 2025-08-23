@@ -17,3 +17,5 @@ const newChat = (req, res) => {
 const getChats = (req, res) => {
   res.status(200).json({ message: "Get chats" });
 }
+
+module.exports = { newChat, getChats };
