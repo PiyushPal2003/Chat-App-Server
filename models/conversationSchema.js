@@ -11,6 +11,7 @@ const conversationSchema = new mongoose.Schema({
       },
       message: "A conversation must have at least two member",
     },
+    unique: true,
   },
   photo: {
     type: String,
@@ -44,11 +45,13 @@ const conversationSchema = new mongoose.Schema({
 })
 
 conversationSchema.pre('save', function(next){
-    if (!this.admin && this.members?.length > 0) {
+    if (!this.admin && this.members?.length > 2) {
         this.admin = this.members[0];
     }
+    this.members.sort();
     next();
 })
+conversationSchema.index({ members: 1 }, { unique: true });
 
 const Conversation = mongoose.model("conversation", conversationSchema);
 module.exports = Conversation;
