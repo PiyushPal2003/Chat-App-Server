@@ -56,10 +56,15 @@ io.on("connection", (socket) => {
   userSocketIDs.set(socket.user._id.toString(), socket.id);
   console.log("Current User socket IDs are:", userSocketIDs);
 
+  socket.on("NEW_USER", (data) => {
+    console.log("New user event received:", data);
+    socket.broadcast.emit("NEW_USER", data);
+  });
 
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);
-  });
+  })
+
 });
 
 

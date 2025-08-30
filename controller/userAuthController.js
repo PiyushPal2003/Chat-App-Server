@@ -19,6 +19,7 @@ async function verifyGoogleToken(token) {
 
 // Controller for user authentication
 const authRegister = async(req, res) => {
+    const io = req.app.get("io");
     if(req.body.type == 'Sign up') {
         const admin = require("firebase-admin");
         const bucket = admin.storage().bucket();
@@ -32,7 +33,6 @@ const authRegister = async(req, res) => {
         const file = req.file;
         if(file){
             const destination = `ChatAppUsersProfilePhoto/${req.body.name}_${req.body.email}_${Date.now()}`;
-
 
             await bucket.upload(file.path, {
             destination: destination,
@@ -71,7 +71,7 @@ const authRegister = async(req, res) => {
                     maxage: 7 * 24 * 60 * 60 * 1000
                 });
 
-                // io.emit('NEW_USER', user);
+                // io.broadcast.emit('NEW_USER', user);
                 return res.status(200).json({message: "User Created Successfully", 
                                 accessToken: accessToken,
                                 user: { 
@@ -91,6 +91,7 @@ const authRegister = async(req, res) => {
 
 const googleauth = async(req, res) => {
     try{
+        const io = req.app.get("io");
         const payload = await verifyGoogleToken(req.body.googleAuthToken);
         
         const usr = await userdb.findOne({email: payload.email})
@@ -98,7 +99,6 @@ const googleauth = async(req, res) => {
             return res.status(201).json({error: "already registered"});
         }
 
-        
         const user = new userdb({
             name: payload.name,
             email: payload.email,
@@ -121,6 +121,8 @@ const googleauth = async(req, res) => {
                     path: '/',
                     maxAge: 7 * 24 * 60 * 60 * 1000
                 });
+
+                // io.broadcast.emit('NEW_USER', user);
 
                 return res.status(200).json({message: "Google Auth Success, User created", 
                         accessToken: accessToken,
