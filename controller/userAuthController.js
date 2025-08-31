@@ -47,7 +47,6 @@ const authRegister = async(req, res) => {
             publicUrl = `https://storage.googleapis.com/${bucket.name}/${destination}`;
         }
 
-        
         const user = new userdb({
             name: req.body.name,
             email: req.body.email,
@@ -71,7 +70,7 @@ const authRegister = async(req, res) => {
                     maxage: 7 * 24 * 60 * 60 * 1000
                 });
 
-                // io.broadcast.emit('NEW_USER', user);
+                io.emit('NEW_USER', user);
                 return res.status(200).json({message: "User Created Successfully", 
                                 accessToken: accessToken,
                                 user: { 
@@ -107,7 +106,6 @@ const googleauth = async(req, res) => {
         });
 
         const refreshToken = jwt.sign({ name: payload.name, email: payload.email, photo: payload.picture, id : user._id, type: 'Refresh' }, process.env.JWT_SECRET, {expiresIn: '7d'});
-        
         const accessToken = jwt.sign({ name: payload.name, email: payload.email, photo: payload.picture, id : user._id, type: 'Access' }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
         user.refreshToken = refreshToken;
@@ -121,8 +119,8 @@ const googleauth = async(req, res) => {
                     path: '/',
                     maxAge: 7 * 24 * 60 * 60 * 1000
                 });
-
-                // io.broadcast.emit('NEW_USER', user);
+                
+                io.emit('NEW_USER', user);
 
                 return res.status(200).json({message: "Google Auth Success, User created", 
                         accessToken: accessToken,
@@ -153,7 +151,7 @@ const googleauth = async(req, res) => {
 
 const authLogin = async(req, res)=>{
     try{
-        const refreshToken = req.cookies.chatRefreshToken;
+        // const refreshToken = req.cookies.chatRefreshToken;
 
         const user = await userdb.findOne({email: req.body.email})
         if(!user){
@@ -174,17 +172,16 @@ const authLogin = async(req, res)=>{
                 return res.status(401).json({ error: 'Invalid password' });
             }
 
+            const refreshToken = jwt.sign({ name: user.name, email: user.email, photo: user.profilePhoto, id : user._id, type: 'Refresh' }, process.env.JWT_SECRET, {expiresIn: '7d'});
             const accessToken = jwt.sign({ name: user.name, email: user.email, photo: user.profilePhoto, id: user._id, type: 'Access' }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
-            if (!refreshToken) {
-                res.cookie('chatRefreshToken', user.refreshToken, {
-                    httpOnly: true,
-                    secure: false,
-                    sameSite: 'LAX', 
-                    path: '/',
-                    maxAge: 7 * 24 * 60 * 60 * 1000
-                });
-            }
+            res.cookie('chatRefreshToken', refreshToken, {
+                httpOnly: true,
+                secure: false,
+                sameSite: 'LAX', 
+                path: '/',
+                maxAge: 7 * 24 * 60 * 60 * 1000
+            });
 
             return res.status(200).json({ message: 'Login successful', token: accessToken, user: {
                 name: user.name,
@@ -204,7 +201,7 @@ const authLogin = async(req, res)=>{
 
 const googleLoginAuth = async(req,res)=>{
     try{
-        const refreshToken = req.cookies.chatRefreshToken;
+        // const refreshToken = req.cookies.chatRefreshToken;
         const payload = await verifyGoogleToken(req.body.googleAuthToken);
         
         const user = await userdb.findOne({email: payload.email})
@@ -212,17 +209,16 @@ const googleLoginAuth = async(req,res)=>{
             return res.status(400).json({error: "User not found"});
         }
         
+        const refreshToken = jwt.sign({ name: user.name, email: user.email, photo: user.profilePhoto, id : user._id, type: 'Refresh' }, process.env.JWT_SECRET, {expiresIn: '7d'});
         const accessToken = jwt.sign({ name: payload.name, email: payload.email, photo: payload.picture, id: user._id, type: 'Access' }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
-        if (!refreshToken) {
-            res.cookie('chatRefreshToken', user.refreshToken, {
-                httpOnly: true,
-                secure: false,
-                sameSite: 'LAX', 
-                path: '/',
-                maxAge: 7 * 24 * 60 * 60 * 1000
-            });
-        }
+        res.cookie('chatRefreshToken', refreshToken, {
+            httpOnly: true,
+            secure: false,
+            sameSite: 'LAX', 
+            path: '/',
+            maxAge: 7 * 24 * 60 * 60 * 1000
+        });
 
         return res.status(200).json({ message: 'Login successful', token: accessToken, user: {
                 name: user.name,

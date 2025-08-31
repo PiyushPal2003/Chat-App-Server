@@ -46,4 +46,7 @@ router.get('/users', verifyToken, userDetailsController.users);
 //new chat
 router.post('/createchats', verifyToken, userChatsController.newChat);
 
+//get chat list
+router.get('/chats/:id', verifyToken, userChatsController.getChats);
+
 module.exports = router;
