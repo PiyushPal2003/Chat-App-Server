@@ -3,7 +3,7 @@ const mongoose = require("mongoose");
 const conversationSchema = new mongoose.Schema({
   members: {
     type: [mongoose.Schema.Types.ObjectId],
-    ref: "user_details",
+    ref: "user_detail",
     required: true,
     validate: {
       validator: function (v) {
@@ -19,7 +19,7 @@ const conversationSchema = new mongoose.Schema({
   },
   admin: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "user_details",
+    ref: "user_detail",
     required: function () {
       return this.members && this.members.length > 2;
     },

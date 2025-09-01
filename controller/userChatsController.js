@@ -22,11 +22,11 @@ const newChat = (req, res) => {
 }
 
 
-const getChats = (req, res) => {
+const getChats = async(req, res) => {
 
-    const chatList = convoDb.find({
-        members: { $in: [req.params.id] }.populate("members", "-password -email -__v").sort({ updatedAt: -1 })
-    })
+    const chatList = await convoDb.find({ members: { $in: [req.params.id] }})
+                                    .populate("members", "-password -email -__v")
+                                    .sort({ updatedAt: -1 });
 
   res.status(200).json({ message: "Get chats", chats: chatList });
 }
