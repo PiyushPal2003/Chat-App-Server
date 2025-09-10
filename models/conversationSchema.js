@@ -44,14 +44,16 @@ const conversationSchema = new mongoose.Schema({
   },
 })
 
-conversationSchema.pre('save', function(next){
-    if (!this.admin && this.members?.length > 2) {
-        this.admin = this.members[0];
-    }
-    this.members.sort();
-    next();
-})
-conversationSchema.index({ members: 1 }, { unique: true });
+conversationSchema.pre("save", function(next) {
+  this.members.sort();  // always sorted
+  this.membersKey = this.members.join("_");  // e.g., "A_B" or "A_B_C"
+  if (!this.admin && this.members?.length > 2) {
+    this.admin = this.members[0];
+  }
+  next();
+});
+
+conversationSchema.index({ membersKey: 1 }, { unique: true });
 
 const Conversation = mongoose.model("conversation", conversationSchema);
 module.exports = Conversation;
