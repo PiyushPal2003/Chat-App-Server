@@ -21,7 +21,6 @@ const newChat = (req, res) => {
     }
 }
 
-
 const getChats = async(req, res) => {
 
     const chatList = await convoDb.find({ members: { $in: [req.params.id] }})
@@ -31,4 +30,20 @@ const getChats = async(req, res) => {
   res.status(200).json({ message: "Get chats", chats: chatList });
 }
 
-module.exports = { newChat, getChats };
+const fetchChatDetails = async(req, res) => {
+    try{
+        const chatDetails = await convoDb.findById(req.params.id).populate("members", "-password -email -__v");
+        if(chatDetails){
+            res.status(200).json({ message: "Chat details fetched", chat: chatDetails });
+        }
+        else{
+            res.status(404).json({ message: "Chat not Found" });
+        }
+    }
+    catch(err){
+        console.log(err);
+        res.status(500).json({ message: "Chat not Found, Server Error" });
+    }
+}
+
+module.exports = { newChat, getChats, fetchChatDetails };

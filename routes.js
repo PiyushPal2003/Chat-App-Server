@@ -49,4 +49,7 @@ router.post('/createchats', verifyToken, userChatsController.newChat);
 //get chat list
 router.get('/chats/:id', verifyToken, userChatsController.getChats);
 
+//fetch chat details
+router.get('/fetchchat/:id', verifyToken, userChatsController.fetchChatDetails);
+
 module.exports = router;

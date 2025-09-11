@@ -286,7 +286,7 @@ const socketAuthenticator = async(err, socket, next)=>{
         if (err) return next(err);
 
         const refreshToken = socket.request.cookies['chatRefreshToken']; 
-
+        console.log(refreshToken);
         if (!refreshToken) {
             return next(new Error("No refresh token provided"));
         }
