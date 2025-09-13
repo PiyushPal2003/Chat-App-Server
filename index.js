@@ -55,6 +55,7 @@ io.on("connection", (socket) => {
   console.log("A user connected:", socket.id);
   userSocketIDs.set(socket.user._id.toString(), socket.id);
   console.log("Current User socket IDs are:", userSocketIDs);
+  socket.broadcast.emit("USER_CONNECTED", Object.fromEntries(userSocketIDs));
 
   // socket.on("NEW_USER", (data) => {
   //   console.log("New user event received:", data);
@@ -63,6 +64,10 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);
+    userSocketIDs.delete(socket.user._id.toString());
+    console.log("Current User socket IDs are:", userSocketIDs);
+
+    socket.broadcast.emit("USER_DISCONNECTED", Object.fromEntries(userSocketIDs));
   })
 
 });

@@ -239,9 +239,11 @@ const googleLoginAuth = async(req,res)=>{
 
 // Refresh Token Controller
 const refreshToken = async (req, res) => {
+  console.log(req.body);
   const refreshToken = req.cookies.chatRefreshToken;
-//   console.log(refreshToken);
+  console.log(refreshToken);
   if (!refreshToken) {
+    console.log("No refresh token found in cookies");
     return res.status(401).json({ error: "No refresh token provided" });
   }
   try {
