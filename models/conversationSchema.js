@@ -11,6 +11,9 @@ const conversationSchema = new mongoose.Schema({
       },
       message: "A conversation must have at least two member",
     },
+  },
+  membersKey: {
+    type: String,
     unique: true,
   },
   photo: {
@@ -38,6 +41,9 @@ const conversationSchema = new mongoose.Schema({
       return this.members && this.members.length > 2;
     },
   },
+  lastMessage: {
+    type: String,
+  },
   timestamp: {
     type: Date,
     default: Date.now,
@@ -46,14 +52,14 @@ const conversationSchema = new mongoose.Schema({
 
 conversationSchema.pre("save", function(next) {
   this.members.sort();  // always sorted
-  this.membersKey = this.members.join("_");  // e.g., "A_B" or "A_B_C"
+  this.membersKey = this.members.join("_");
   if (!this.admin && this.members?.length > 2) {
     this.admin = this.members[0];
   }
   next();
 });
 
-conversationSchema.index({ membersKey: 1 }, { unique: true });
+// conversationSchema.index({ membersKey: 1 }, { unique: true });
 
 const Conversation = mongoose.model("conversation", conversationSchema);
 module.exports = Conversation;

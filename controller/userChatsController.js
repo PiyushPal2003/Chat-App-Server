@@ -1,4 +1,5 @@
 const convoDb = require("../models/conversationSchema");
+const chatDb = require("../models/chatschema");
 
 const newChat = (req, res) => {
     try{
@@ -46,4 +47,43 @@ const fetchChatDetails = async(req, res) => {
     }
 }
 
-module.exports = { newChat, getChats, fetchChatDetails };
+
+
+const sendChat = async(req, res) => {
+    try{
+        const convoId = req.params.id;
+        const message = req.body.message;
+        const senderId = req.user.id;
+        const receiverId = req.body.receiverId;
+
+        if(!convoId || !message || !senderId || !receiverId){
+            return res.status(400).json({ message: "All fields are required" });
+        }
+
+        const chatConvoDB = await convoDb.findById(convoId);
+        if(chatConvoDB){
+            const chat = new chatDb({
+                conversationId: convoId,
+                senderId: senderId,
+                receiverId: receiverId,
+                message: { text: message },
+            })
+            await chat.save();
+
+            // Update last message in conversation
+            chatConvoDB.lastMessage = message;
+            await chatConvoDB.save();
+
+            return res.status(200).json({ message: "Chat sent and convoDB updated successfully", chat: chat });
+        }
+        else{
+            return res.status(404).json({ message: "Chat not Found" });
+        }
+    }
+    catch(err){
+        console.log(err);
+        res.status(500).json({ message: "Chat not sent, Server Error" });
+    }
+}
+
+module.exports = { newChat, getChats, fetchChatDetails, sendChat};

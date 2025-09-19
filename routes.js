@@ -52,4 +52,7 @@ router.get('/chats/:id', verifyToken, userChatsController.getChats);
 //fetch chat details
 router.get('/fetchchat/:id', verifyToken, userChatsController.fetchChatDetails);
 
+//send chat
+router.post('/sendchat/:id', verifyToken, userChatsController.sendChat);
+
 module.exports = router;
