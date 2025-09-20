@@ -53,6 +53,6 @@ router.get('/chats/:id', verifyToken, userChatsController.getChats);
 router.get('/fetchchat/:id', verifyToken, userChatsController.fetchChatDetails);
 
 //send chat
-router.post('/sendchat/:id', verifyToken, userChatsController.sendChat);
+router.post('/sendchat/:id', verifyToken, upload.array("files"), userChatsController.sendChat);
 
 module.exports = router;

@@ -50,6 +50,7 @@ app.use('/api', router);
 
 //socket
 const userSocketIDs = new Map();
+app.set("userSocketIDs", userSocketIDs);
 
 io.on("connection", (socket) => {
   console.log("A user connected:", socket.id);
