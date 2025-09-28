@@ -55,4 +55,7 @@ router.get('/fetchchat/:id', verifyToken, userChatsController.fetchChatDetails);
 //send chat
 router.post('/sendchat/:id', verifyToken, upload.array("files"), userChatsController.sendChat);
 
+//fetch Messages
+router.get('/fetchmessages/:id', verifyToken, userChatsController.fetchMessages);
+
 module.exports = router;

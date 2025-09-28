@@ -61,7 +61,7 @@ const sendChat = async (req, res) => {
     const admin = require("firebase-admin");
     const bucket = admin.storage().bucket();
 
-    if (!convoId || !message || !senderId || !receiverId) {
+    if (!convoId || !senderId || !receiverId) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
@@ -69,6 +69,11 @@ const sendChat = async (req, res) => {
     console.log("Files received:", req.files);
 
     let fileUrlArray = [];
+
+    const chatConvoDB = await convoDb.findById(convoId);
+    if (!chatConvoDB) {
+      return res.status(404).json({ message: "Chat not Found" });
+    }
 
     if (req.files && req.files.length > 0) {
       // Upload all files
@@ -92,17 +97,12 @@ const sendChat = async (req, res) => {
       }
     }
 
-    const chatConvoDB = await convoDb.findById(convoId);
-    if (!chatConvoDB) {
-      return res.status(404).json({ message: "Chat not Found" });
-    }
-
     const chat = new chatDb({
       conversationId: convoId,
       senderId,
       receiverId,
       message: {
-        text: message,
+        text: message ? message : undefined,
         url: fileUrlArray.length > 0 ? fileUrlArray : undefined,
       },
     });
@@ -110,7 +110,7 @@ const sendChat = async (req, res) => {
     await chat.save();
 
     // Update last message in conversation
-    chatConvoDB.lastMessage = message;
+    chatConvoDB.lastMessage = message ? message : fileUrlArray[0].split("_").pop();
     await chatConvoDB.save();
 
     // Send to receiver if online
@@ -129,5 +129,32 @@ const sendChat = async (req, res) => {
   }
 };
 
+const fetchMessages = async (req, res) => {
+  try{
+    const convoId = req.params.id;
+    const lastMessageId = req.query.lastMessageId || null;
 
-module.exports = { newChat, getChats, fetchChatDetails, sendChat};
+    let query = { conversationId: convoId };
+    if (lastMessageId) {
+      query._id = { $lt: lastMessageId };
+    }
+
+    const conversation = await convoDb.findById(convoId);
+    const messages = await chatDb.find(query).limit(15)
+
+    if(messages.length < 15){
+      res.status(200).json({ message: "Batch of 15 Messages", messages, conversation });
+    }
+    else{
+      res.status(201).json({ message: "Last batch of Messages", messages, conversation });
+    }
+
+  }
+  catch(err){
+    console.log(err);
+    res.status(500).json({ message: "Messages not fetched, Server Error" });
+  }
+}
+
+
+module.exports = { newChat, getChats, fetchChatDetails, sendChat, fetchMessages};
