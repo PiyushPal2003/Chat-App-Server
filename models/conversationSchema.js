@@ -44,6 +44,7 @@ const conversationSchema = new mongoose.Schema({
   lastMessage: {
     type: String,
   },
+  isGroupChat:{ type: Boolean, default: false },
   timestamp: {
     type: Date,
     default: Date.now,

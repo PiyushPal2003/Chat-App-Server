@@ -2,25 +2,74 @@ const convoDb = require("../models/conversationSchema");
 const chatDb = require("../models/chatschema");
 const fs = require("fs");
 
-const newChat = (req, res) => {
+const newChat = async(req, res) => {
     try{
-        console.log(req.body.id, req.user.id);
-        // console.log(req.body.id.id);
-        const newConvo = new convoDb({
-            members: [req.body.id, req.user.id],
-        })
-        newConvo.save()
-        .then(()=>{
-            res.status(200).json({ message: "New chat created with: "+ req.body.id, chat: newConvo});
-        })
-        .catch((err)=>{
+          console.log(req.body.id, req.user.id);
+            // console.log(req.body.id.id);
+          const newConvo = new convoDb({
+              members: [req.body.id, req.user.id],
+          })
+          newConvo.save()
+          .then(()=>{
+              res.status(200).json({ message: "New chat created with: "+ req.body.id, chat: newConvo});
+          })
+          .catch((err)=>{
             res.status(400).json({ message: err });
-        })
-    }
+          })
+        }
     catch(err){
         console.log(err);
         res.status(500).json({ message: "Error New chat not created" });
     }
+}
+
+const newGroupChat = async(req, res) => {
+  try{
+    console.log("payload", req.body);
+    console.log("payload", req.body.payload);
+        if(req.body.isGroupChat){
+          const admin = require("firebase-admin");
+          const bucket = admin.storage().bucket();
+          let publicUrl;
+          
+          const file = req.file;
+          if(file){
+              const destination = `ChatAppGroupPhoto/${req.body.name}_${req.body.adminId}_${Date.now()}`;
+
+              await bucket.upload(file.path, {
+              destination: destination,
+              metadata: {
+                  contentType: file.mimetype,
+              },
+              });
+              fs.unlinkSync(file.path);
+              const uploadedFile = bucket.file(destination);
+              await uploadedFile.makePublic();
+
+              publicUrl = `https://storage.googleapis.com/${bucket.name}/${destination}`;
+          }
+
+          const newGroup = new convoDb({
+              isGroupChat: true,
+              grpname: req.body.name,
+              description: req.body.grpDesc,
+              members: JSON.parse(req.body.members),
+              admin: req.body.adminId,
+              photo: publicUrl || "NA",
+          })
+          newGroup.save()
+          .then(()=>{
+              res.status(200).json({ message: "New Group chat created: "+ req.body.name, chat: newGroup});
+          })
+          .catch((err)=>{
+            res.status(400).json({ message: err });
+          })
+        }
+  }
+  catch(err){
+    console.log(err);
+    res.status(500).json({ message: "Error New Group chat not created" });
+  }
 }
 
 const getChats = async(req, res) => {
@@ -157,4 +206,4 @@ const fetchMessages = async (req, res) => {
 }
 
 
-module.exports = { newChat, getChats, fetchChatDetails, sendChat, fetchMessages};
+module.exports = { newChat, getChats, fetchChatDetails, sendChat, fetchMessages, newGroupChat};

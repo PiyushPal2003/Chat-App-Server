@@ -46,6 +46,9 @@ router.get('/users', verifyToken, userDetailsController.users);
 //new chat
 router.post('/createchats', verifyToken, userChatsController.newChat);
 
+//new group chat
+router.post('/creategroup', upload.single('grpPhoto'),  verifyToken, userChatsController.newGroupChat);
+
 //get chat list
 router.get('/chats/:id', verifyToken, userChatsController.getChats);
 
