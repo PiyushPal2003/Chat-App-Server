@@ -11,11 +11,11 @@ const chat_data = new mongoose.Schema({
     ref: "user_details",
     required: true,
   },
-  receiverId: {
+  receiverId: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: "user_details",
     required: true,
-  },
+  }],
   message: {
     text: { type: String, default: "" },
     url: [{ type: String, default: "" }],

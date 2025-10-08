@@ -105,7 +105,8 @@ const sendChat = async (req, res) => {
     const io = req.app.get("io");
     const userSocketIDs = req.app.get("userSocketIDs");
     const convoId = req.params.id;
-    const { message, receiverId } = req.body;
+    const message = req.body.message;
+    const receiverId = JSON.parse(req.body.receiverId);
     const senderId = req.user.id;
     const admin = require("firebase-admin");
     const bucket = admin.storage().bucket();
@@ -163,10 +164,12 @@ const sendChat = async (req, res) => {
     await chatConvoDB.save();
 
     // Send to receiver if online
-    const receiverSocket = userSocketIDs.get(receiverId);
-    if (receiverSocket) {
-      io.to(receiverSocket).emit("newMessage", chat); // send full chat object
-    }
+    receiverId.forEach(receiver => {
+      const receiverSocket = userSocketIDs.get(receiver);
+      if (receiverSocket) {
+        io.to(receiverSocket).emit("newMessage", chat);
+      } 
+    });
 
     return res.status(200).json({
       message: "Chat sent and convoDB updated successfully",
