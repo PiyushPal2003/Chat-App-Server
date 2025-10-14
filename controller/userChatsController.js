@@ -83,7 +83,7 @@ const getChats = async(req, res) => {
 
 const fetchChatDetails = async(req, res) => {
     try{
-        const chatDetails = await convoDb.findById(req.params.id).populate("members", "-password -email -__v");
+        const chatDetails = await convoDb.findById(req.params.id).populate("members", "-password -__v");
         if(chatDetails){
             res.status(200).json({ message: "Chat details fetched", chat: chatDetails });
         }

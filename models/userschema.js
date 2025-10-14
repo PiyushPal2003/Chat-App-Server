@@ -28,8 +28,9 @@ const user_details = new mongoose.Schema({
     },
     refreshToken:{
         type: String,
-    }
-})
+    },
+}
+, { timestamps: true });
 
 user_details.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
