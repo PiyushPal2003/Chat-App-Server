@@ -40,8 +40,14 @@ router.post('/auth/googlelogin', userAuthController.googleLoginAuth);
 //Refresh Token
 router.get('/auth/refresh', userAuthController.refreshToken);
 
+//current user
+router.get('/currentuser', verifyToken, userDetailsController.currentUser);
+
 //users
 router.get('/users', verifyToken, userDetailsController.users);
+
+//edit profile
+router.patch('/editprofile', verifyToken, upload.single('profilePhoto'), userDetailsController.editProfile);
 
 //new chat
 router.post('/createchats', verifyToken, userChatsController.newChat);

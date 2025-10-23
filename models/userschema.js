@@ -16,6 +16,11 @@ const user_details = new mongoose.Schema({
     profilePhoto: {
         type: String,
     },
+    desc: {
+        type: String,
+        maxlength: [50, 'Description must be upto 50 characters'],
+        default: "",
+    },
     password: {
         type: String,
         // required: true,
