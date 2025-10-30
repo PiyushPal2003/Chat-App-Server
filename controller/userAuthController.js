@@ -271,7 +271,7 @@ const refreshToken = async (req, res) => {
           name: decoded.name,
           email: decoded.email,
           profilePhoto: decoded.photo,
-          id: decoded.id,
+          _id: decoded.id,
         },
       });
     });

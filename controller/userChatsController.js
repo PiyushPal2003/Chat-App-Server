@@ -183,7 +183,7 @@ const sendChat = async (req, res) => {
 
 const fetchMessages = async (req, res) => {
   try{
-    const convoId = req.params.id;
+    const convoId = req.query.chatId;
     const lastMessageId = req.query.lastMessageId || null;
 
     let query = { conversationId: convoId };
@@ -192,7 +192,10 @@ const fetchMessages = async (req, res) => {
     }
 
     const conversation = await convoDb.findById(convoId);
-    const messages = await chatDb.find(query).limit(15)
+    const messages = await chatDb.find(query).sort({ _id: -1 }).limit(8);
+    //here we get data in descending order so we need to reverse it
+    messages.reverse();
+    // const messages = await chatDb.find(query).limit(15);
 
     if(messages.length < 15){
       res.status(200).json({ message: "Batch of 15 Messages", messages, conversation });
