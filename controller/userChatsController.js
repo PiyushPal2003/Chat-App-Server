@@ -1,6 +1,7 @@
 const convoDb = require("../models/conversationSchema");
 const chatDb = require("../models/chatschema");
 const fs = require("fs");
+const chatdb = require("../models/chatschema");
 
 const newChat = async(req, res) => {
     try{
@@ -97,9 +98,6 @@ const fetchChatDetails = async(req, res) => {
     }
 }
 
-
-
-
 const sendChat = async (req, res) => {
   try {
     const io = req.app.get("io");
@@ -194,7 +192,7 @@ const fetchMessages = async (req, res) => {
     const conversation = await convoDb.findById(convoId);
     const messages = await chatDb.find(query).sort({ _id: -1 }).limit(8);
     //here we get data in descending order so we need to reverse it
-    messages.reverse();
+      messages.reverse();
     // const messages = await chatDb.find(query).limit(15);
 
     if(messages.length < 15){
@@ -211,5 +209,81 @@ const fetchMessages = async (req, res) => {
   }
 }
 
+const editGroupChat = async (req, res) => {
+    try{
+      console.log(req.file);
+      console.log(req.body);
+      const userSocketIDs = req.app.get("userSocketIDs");
+      const {id} = req.user;
+      const convo = await convoDb.findById(req.body.convoId);
+      const receiverIds = convo.members.filter(memberId => memberId.toString() !== id);
+      const admin = require("firebase-admin");
+      const bucket = admin.storage().bucket();
+      let publicUrl;
+  
+      const file = req.file;
+      if(file){
+        const alreadyStored = convo.photo.includes('storage.googleapis.com')?convo.photo.split('.appspot.com/')[1] : null;
+  
+        if(alreadyStored){
+          const existingFile = bucket.file(alreadyStored);
+          await existingFile.delete().catch((err)=>{
+            console.log("Error deleting existing file:", err);
+            res.status(500).json({ error: "Error while deleting previous photo" });
+          });
+        }
+        
+        // const destination = `ChatAppUsersProfilePhoto/${user.name}_${user.email}_${Date.now()}`;
+        const destination = `ChatAppGroupPhoto/${req.body.name}_UpdatedGroupPhoto_By_${req.body.user}(${id})_${Date.now()}`;
+  
+        await bucket.upload(file.path, {
+        destination: destination,
+        metadata: {
+            contentType: file.mimetype,
+        },
+        });
+        fs.unlinkSync(file.path);
+        const uploadedFile = bucket.file(destination);
+        await uploadedFile.makePublic();
+  
+        publicUrl = `https://storage.googleapis.com/${bucket.name}/${destination}`;
+      }
+  
+      if(req.body.name){
+        convo.grpname = req.body.name;
+      }
+      if(publicUrl){
+        convo.photo = publicUrl;
+      }
+      if(req.body.description){
+        convo.description = req.body.description;
+      }
+      const chat = new chatdb({
+        conversationId: req.body.convoId,
+        senderId: id,
+        receiverId: receiverIds,
+        message: {
+          text: `|SystemGenerated| ${req.body.user} updated the groups ${publicUrl ? 'photo, ' : ''} ${req.body.name ? 'name, ' : ''} ${req.body.description ? 'description' : ''}`.replace(/, $/, ''),
+        },
+      })
+      await Promise.all([
+        convo.save({ validateModifiedOnly: true }),
+        chat.save()
+      ]);
+  
+      receiverIds.forEach(receiver => {
+        const receiverSocket = userSocketIDs.get(receiver);
+        if (receiverSocket) {
+          io.to(receiverSocket).emit("newMessage", chat);
+        } 
+      });
+      res.status(200).json({ message: "Group Chat updated successfully", chat: chat });
+    }
+    catch(error){
+      console.error(error);
+      res.status(500).json({ error: "Internal Server Error" });
+    }
+}
 
-module.exports = { newChat, getChats, fetchChatDetails, sendChat, fetchMessages, newGroupChat};
+
+module.exports = { newChat, getChats, fetchChatDetails, sendChat, fetchMessages, newGroupChat, editGroupChat};

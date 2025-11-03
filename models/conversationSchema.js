@@ -20,13 +20,13 @@ const conversationSchema = new mongoose.Schema({
     type: String,
     default: "NA",
   },
-  admin: {
+  admin: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: "user_detail",
     required: function () {
       return this.members && this.members.length > 2;
     },
-  },
+  }],
   grpname: {
     type: String,
     default: 'Welcome to your Group Chat',
