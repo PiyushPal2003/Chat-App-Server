@@ -6,13 +6,18 @@ const chatdb = require("../models/chatschema");
 const newChat = async(req, res) => {
     try{
           console.log(req.body.id, req.user.id);
+          const memkey = [req.body.id, req.user.id].sort().join("_");
+          const existingConvo = await convoDb.findOne({ membersKey: memkey });
+          if(existingConvo){
+              return  res.status(201).json({ status:201, message: "Chat already exists", chat: existingConvo});
+          }
             // console.log(req.body.id.id);
           const newConvo = new convoDb({
               members: [req.body.id, req.user.id],
           })
           newConvo.save()
           .then(()=>{
-              res.status(200).json({ message: "New chat created with: "+ req.body.id, chat: newConvo});
+              res.status(200).json({status:200, message: "New chat created with: "+ req.body.id, chat: newConvo});
           })
           .catch((err)=>{
             res.status(400).json({ message: err });
@@ -234,7 +239,7 @@ const editGroupChat = async (req, res) => {
         }
         
         // const destination = `ChatAppUsersProfilePhoto/${user.name}_${user.email}_${Date.now()}`;
-        const destination = `ChatAppGroupPhoto/${req.body.name}_UpdatedGroupPhoto_By_${req.body.user}(${id})_${Date.now()}`;
+        const destination = `ChatAppGroupPhoto/${req.body.old_grpname}_UpdatedGroupPhoto_By_${req.body.user}(${id})_${Date.now()}`;
   
         await bucket.upload(file.path, {
         destination: destination,
@@ -258,12 +263,28 @@ const editGroupChat = async (req, res) => {
       if(req.body.description){
         convo.description = req.body.description;
       }
+      let newAdmin;
+      if(req.body.admin){
+        newAdmin = JSON.parse(req.body.admin);
+        const newMembers = Array.from(new Set([...convo.admin.map(id => id.toString()), newAdmin.id]));
+        convo.admin = newMembers;
+      }
+      if(req.body.member){
+        const newMem = JSON.parse(req.body.member);
+        const newMembers = Array.from(new Set([...convo.members.map(id => id.toString()), newMem]));
+        convo.members = newMembers;
+        convo.membersKey = newMembers.sort().join("_");
+      }
+
       const chat = new chatdb({
         conversationId: req.body.convoId,
         senderId: id,
         receiverId: receiverIds,
         message: {
-          text: `|SystemGenerated| ${req.body.user} updated the groups ${publicUrl ? 'photo, ' : ''} ${req.body.name ? 'name, ' : ''} ${req.body.description ? 'description' : ''}`.replace(/, $/, ''),
+          text: 
+          req.body.admin ? `|SystemGenerated| ${newAdmin.name} was made admin by ${req.body.user}`
+            : 
+          `|SystemGenerated| ${req.body.user} updated the group's ${ publicUrl ? 'photo, ' : ''}${req.body.name ? 'name, ' : ''}${req.body.description ? 'description' : ''}`.replace(/, $/, ''),
         },
       })
       await Promise.all([
