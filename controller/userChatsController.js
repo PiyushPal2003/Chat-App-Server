@@ -188,6 +188,7 @@ const fetchMessages = async (req, res) => {
   try{
     const convoId = req.query.chatId;
     const lastMessageId = req.query.lastMessageId || null;
+    console.log(lastMessageId);
 
     let query = { conversationId: convoId };
     if (lastMessageId) {
@@ -197,7 +198,9 @@ const fetchMessages = async (req, res) => {
     const conversation = await convoDb.findById(convoId);
     const messages = await chatDb.find(query).sort({ _id: -1 }).limit(8);
     //here we get data in descending order so we need to reverse it
+    if(lastMessageId == null){
       messages.reverse();
+    }
     // const messages = await chatDb.find(query).limit(15);
 
     if(messages.length < 15){
@@ -218,10 +221,13 @@ const editGroupChat = async (req, res) => {
     try{
       console.log(req.file);
       console.log(req.body);
+      const io = req.app.get("io");
       const userSocketIDs = req.app.get("userSocketIDs");
       const {id} = req.user;
       const convo = await convoDb.findById(req.body.convoId);
-      const receiverIds = convo.members.filter(memberId => memberId.toString() !== id);
+      const receivers = convo.members.filter(memberId => memberId.toString() !== id);
+      const receiverIds = receivers.map(memberId => memberId.toString());
+      console.log(receiverIds);
       const admin = require("firebase-admin");
       const bucket = admin.storage().bucket();
       let publicUrl;
@@ -294,6 +300,7 @@ const editGroupChat = async (req, res) => {
   
       receiverIds.forEach(receiver => {
         const receiverSocket = userSocketIDs.get(receiver);
+        console.log(receiverSocket);
         if (receiverSocket) {
           io.to(receiverSocket).emit("newMessage", chat);
         } 
