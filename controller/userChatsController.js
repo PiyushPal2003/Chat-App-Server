@@ -196,11 +196,11 @@ const fetchMessages = async (req, res) => {
     }
 
     const conversation = await convoDb.findById(convoId);
-    const messages = await chatDb.find(query).sort({ _id: -1 }).limit(8);
+    const messages = await chatDb.find(query).sort({ _id: -1 }).limit(15);
     //here we get data in descending order so we need to reverse it
-    if(lastMessageId == null){
+    // if(lastMessageId == null){
       messages.reverse();
-    }
+    // }
     // const messages = await chatDb.find(query).limit(15);
 
     if(messages.length < 15){
