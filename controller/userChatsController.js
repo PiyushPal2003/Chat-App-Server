@@ -227,7 +227,7 @@ const editGroupChat = async (req, res) => {
       const convo = await convoDb.findById(req.body.convoId);
       const receivers = convo.members.filter(memberId => memberId.toString() !== id);
       const receiverIds = receivers.map(memberId => memberId.toString());
-      console.log(receiverIds);
+      console.log('receivers:', receiverIds);
       const admin = require("firebase-admin");
       const bucket = admin.storage().bucket();
       let publicUrl;
@@ -275,9 +275,19 @@ const editGroupChat = async (req, res) => {
         const newMembers = Array.from(new Set([...convo.admin.map(id => id.toString()), newAdmin.id]));
         convo.admin = newMembers;
       }
-      if(req.body.member){
-        const newMem = JSON.parse(req.body.member);
-        const newMembers = Array.from(new Set([...convo.members.map(id => id.toString()), newMem]));
+      if(req.body.members){
+        const newMem = JSON.parse(req.body.members);
+        const newMembers = Array.from(new Set([...convo.members.map(id => id.toString()), ...newMem]));
+        convo.members = newMembers;
+        convo.membersKey = newMembers.sort().join("_");
+      }
+      if(req.body.rm){
+        const newMembers = Array.from(new Set([...convo.members.map(id => id.toString())])).filter((m)=>m!=req.body.rm);
+        convo.members = newMembers;
+        convo.membersKey = newMembers.sort().join("_");
+      }
+      if(req.body.leave){
+        const newMembers = Array.from(new Set([...convo.members.map(id => id.toString())])).filter((m)=>m!=id);
         convo.members = newMembers;
         convo.membersKey = newMembers.sort().join("_");
       }
@@ -288,6 +298,12 @@ const editGroupChat = async (req, res) => {
         receiverId: receiverIds,
         message: {
           text: 
+          req.body.leave ? `|SystemGenerated| ${req.user.name} left the group`
+            :
+          req.body.rm ? `|SystemGenerated| ${req.user.name} removed ${req.body.rm} from the group`
+            :
+          req.body.members ? `|SystemGenerated| ${req.user.name} added ${JSON.parse(req.body.members).join(' ')} to the group`
+            :
           req.body.admin ? `|SystemGenerated| ${newAdmin.name} was made admin by ${req.body.user}`
             : 
           `|SystemGenerated| ${req.body.user} updated the group's ${ publicUrl ? 'photo, ' : ''}${req.body.name ? 'name, ' : ''}${req.body.description ? 'description' : ''}`.replace(/, $/, ''),
@@ -300,7 +316,7 @@ const editGroupChat = async (req, res) => {
   
       receiverIds.forEach(receiver => {
         const receiverSocket = userSocketIDs.get(receiver);
-        console.log(receiverSocket);
+        console.log('socket id', receiverSocket);
         if (receiverSocket) {
           io.to(receiverSocket).emit("newMessage", chat);
         } 

@@ -14,7 +14,7 @@ const conversationSchema = new mongoose.Schema({
   },
   membersKey: {
     type: String,
-    unique: true,
+    // unique: true,
   },
   photo: {
     type: String,
