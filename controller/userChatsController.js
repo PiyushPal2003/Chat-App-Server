@@ -5,6 +5,8 @@ const chatdb = require("../models/chatschema");
 
 const newChat = async(req, res) => {
     try{
+          const io = req.app.get("io");
+          const userSocketIDs = req.app.get("userSocketIDs");
           console.log(req.body.id, req.user.id);
           const memkey = [req.body.id, req.user.id].sort().join("_");
           const existingConvo = await convoDb.findOne({ membersKey: memkey });
@@ -17,6 +19,7 @@ const newChat = async(req, res) => {
           })
           newConvo.save()
           .then(()=>{
+              io.to(userSocketIDs.get(req.body.id)).emit("newChat", newConvo);
               res.status(200).json({status:200, message: "New chat created with: "+ req.body.id, chat: newConvo});
           })
           .catch((err)=>{
@@ -226,7 +229,7 @@ const editGroupChat = async (req, res) => {
       const {id} = req.user;
       const convo = await convoDb.findById(req.body.convoId);
       const receivers = convo.members.filter(memberId => memberId.toString() !== id);
-      const receiverIds = receivers.map(memberId => memberId.toString());
+      let receiverIds = receivers.map(memberId => memberId.toString());
       console.log('receivers:', receiverIds);
       const admin = require("firebase-admin");
       const bucket = admin.storage().bucket();
@@ -280,6 +283,8 @@ const editGroupChat = async (req, res) => {
         const newMembers = Array.from(new Set([...convo.members.map(id => id.toString()), ...newMem]));
         convo.members = newMembers;
         convo.membersKey = newMembers.sort().join("_");
+
+        receiverIds = newMembers.filter((m)=>m!=id);
       }
       if(req.body.rm){
         const newMembers = Array.from(new Set([...convo.members.map(id => id.toString())])).filter((m)=>m!=req.body.rm);
@@ -319,13 +324,19 @@ const editGroupChat = async (req, res) => {
         console.log('socket id', receiverSocket);
         if (receiverSocket) {
           io.to(receiverSocket).emit("newMessage", chat);
+          if(req.body.members){
+            io.to(receiverSocket).emit("newChat", convo);
+          }
+          if(req.body.rm || req.body.leave || req.body.description || req.body.name || publicUrl){
+            io.to(receiverSocket).emit("updateUser", convo);
+          }
         } 
       });
       res.status(200).json({ message: "Group Chat updated successfully", chat: chat });
     }
     catch(error){
       console.error(error);
-      res.status(500).json({ error: "Internal Server Error" });
+      res.status(500).json({ error: "Internal Server Error", details: error.message });
     }
 }
 
