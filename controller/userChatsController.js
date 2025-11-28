@@ -2,6 +2,7 @@ const convoDb = require("../models/conversationSchema");
 const chatDb = require("../models/chatschema");
 const fs = require("fs");
 const chatdb = require("../models/chatschema");
+const UserDb = require("../models/userschema");
 
 const newChat = async(req, res) => {
     try{
@@ -234,6 +235,8 @@ const editGroupChat = async (req, res) => {
       const admin = require("firebase-admin");
       const bucket = admin.storage().bucket();
       let publicUrl;
+      let newAdmin;
+      let responseTxt = "";
   
       const file = req.file;
       if(file){
@@ -272,29 +275,47 @@ const editGroupChat = async (req, res) => {
       if(req.body.description){
         convo.description = req.body.description;
       }
-      let newAdmin;
+      responseTxt = `|SystemGenerated| ${req.body.user} updated the group's ${ publicUrl ? 'photo, ' : ''}${req.body.name ? 'name, ' : ''}${req.body.description ? 'description' : ''}`.replace(/, $/, '')
+
       if(req.body.admin){
         newAdmin = JSON.parse(req.body.admin);
         const newMembers = Array.from(new Set([...convo.admin.map(id => id.toString()), newAdmin.id]));
         convo.admin = newMembers;
+
+        responseTxt = `|SystemGenerated| ${newAdmin.name} was made admin by ${req.body.user}`;
       }
       if(req.body.members){
         const newMem = JSON.parse(req.body.members);
         const newMembers = Array.from(new Set([...convo.members.map(id => id.toString()), ...newMem]));
         convo.members = newMembers;
         convo.membersKey = newMembers.sort().join("_");
-
         receiverIds = newMembers.filter((m)=>m!=id);
+
+        const memNames = await UserDb.find({ _id: { $in: newMem } }).select('name');
+        const newMemNames = memNames.map(user => user.name);
+        responseTxt = `|SystemGenerated| ${req.user.name} added ${newMemNames.join(', ')} to the group`;
       }
       if(req.body.rm){
         const newMembers = Array.from(new Set([...convo.members.map(id => id.toString())])).filter((m)=>m!=req.body.rm);
         convo.members = newMembers;
         convo.membersKey = newMembers.sort().join("_");
+        if(convo.admin.includes(req.body.rm)){
+          const updatedAdmins = convo.admin.filter((a)=>a.toString()!==req.body.rm);
+          convo.admin = updatedAdmins;
+        }
+
+        const removedUser = await UserDb.findById(req.body.rm);
+        responseTxt = `|SystemGenerated| ${req.user.name} removed ${removedUser.name} from the group`;
       }
       if(req.body.leave){
         const newMembers = Array.from(new Set([...convo.members.map(id => id.toString())])).filter((m)=>m!=id);
         convo.members = newMembers;
         convo.membersKey = newMembers.sort().join("_");
+        if(convo.admin.includes(req.body.leave)){
+          const updatedAdmins = convo.admin.filter((a)=>a.toString()!==req.body.rm);
+          convo.admin = updatedAdmins;
+        }
+        responseTxt = `|SystemGenerated| ${req.user.name} left the group`;
       }
 
       const chat = new chatdb({
@@ -302,16 +323,7 @@ const editGroupChat = async (req, res) => {
         senderId: id,
         receiverId: receiverIds,
         message: {
-          text: 
-          req.body.leave ? `|SystemGenerated| ${req.user.name} left the group`
-            :
-          req.body.rm ? `|SystemGenerated| ${req.user.name} removed ${req.body.rm} from the group`
-            :
-          req.body.members ? `|SystemGenerated| ${req.user.name} added ${JSON.parse(req.body.members).join(' ')} to the group`
-            :
-          req.body.admin ? `|SystemGenerated| ${newAdmin.name} was made admin by ${req.body.user}`
-            : 
-          `|SystemGenerated| ${req.body.user} updated the group's ${ publicUrl ? 'photo, ' : ''}${req.body.name ? 'name, ' : ''}${req.body.description ? 'description' : ''}`.replace(/, $/, ''),
+          text: responseTxt,
         },
       })
       await Promise.all([
