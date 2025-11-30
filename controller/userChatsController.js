@@ -1,7 +1,7 @@
 const convoDb = require("../models/conversationSchema");
 const chatDb = require("../models/chatschema");
 const fs = require("fs");
-const chatdb = require("../models/chatschema");
+// const chatdb = require("../models/chatschema");
 const UserDb = require("../models/userschema");
 
 const newChat = async(req, res) => {
@@ -35,6 +35,7 @@ const newChat = async(req, res) => {
 
 const newGroupChat = async(req, res) => {
   try{
+    const user = req.user;
     console.log("payload", req.body);
     console.log("payload", req.body.payload);
         if(req.body.isGroupChat){
@@ -67,7 +68,18 @@ const newGroupChat = async(req, res) => {
               admin: req.body.adminId,
               photo: publicUrl || "NA",
           })
-          newGroup.save()
+          const chat = new chatdb({
+            conversationId: req.body.convoId,
+            senderId: id,
+            receiverId: receiverIds,
+            message: {
+              text: `|SystemGenerated| ${user.name} created the group "${req.body.name}"`,
+            },
+          })
+          await Promise.all([
+            newGroup.save(),
+            chat.save()
+          ])
           .then(()=>{
               res.status(200).json({ message: "New Group chat created: "+ req.body.name, chat: newGroup});
           })
@@ -84,9 +96,71 @@ const newGroupChat = async(req, res) => {
 
 const getChats = async(req, res) => {
 
-    const chatList = await convoDb.find({ members: { $in: [req.params.id] }})
-                                    .populate("members", "-password -email -__v")
-                                    .sort({ updatedAt: -1 });
+  // const chatList = await convoDb.find({ members: { $in: [req.params.id] }})
+  //                                 .populate("members", "-password -email -__v")
+  //                                 .sort({ updatedAt: -1 });
+  // const convoIds = chatList.map(chat => chat._id);
+  // console.log("Convo Ids:", convoIds);
+
+  // const lastMessages = await chatDb.aggregate([
+  //   { $match: { conversationId: { $in: convoIds } } },
+  //   // { $sort: { createdAt: -1 } },
+  //   {
+  //     $group: {
+  //       _id: "$conversationId",
+  //       conversationId: { $first: "$conversationId" },
+  //       message: { $first: "$message" },
+  //       createdAt: { $first: "$createdAt" },
+  //     }
+  //   },
+  //   { $sort: { createdAt: -1 } }
+  // ]);
+
+  const chatList = await convoDb.aggregate([
+    { 
+      $match: { 
+        members: { $in: [req.params.id] }
+      }
+    },
+    { 
+      $sort: { updatedAt: -1 } 
+    },
+    {
+      $lookup: {
+        from: "user_details",
+        localField: "members",
+        foreignField: "_id",
+        as: "members"
+      }
+    },
+    {
+      $project: {
+        "members.password": 0,
+        "members.email": 0,
+        "members.__v": 0
+      }
+    },
+    {
+      $lookup:{
+        from: "chats",
+        let: { convoId: "$_id" },
+        pipeline: [
+          { $match: { $expr: { $eq: [ { $toObjectId: "$conversationId" }, "$$convoId" ] } } },
+          { $sort: { createdAt: -1 } },
+          { $limit: 1 }
+        ],
+        as: "allChats"
+      },
+    },
+    {
+      $unwind: {
+        path: "$allChats",
+        preserveNullAndEmptyArrays: true
+      }
+    }
+  ])
+
+  console.log("Last Messages:", chatList);
 
   res.status(200).json({ message: "Get chats", chats: chatList });
 }
@@ -167,8 +241,8 @@ const sendChat = async (req, res) => {
     await chat.save();
 
     // Update last message in conversation
-    chatConvoDB.lastMessage = message ? message : fileUrlArray[0].split("_").pop();
-    await chatConvoDB.save();
+    // chatConvoDB.lastMessage = message ? message : fileUrlArray[0].split("_").pop();
+    // await chatConvoDB.save();
 
     // Send to receiver if online
     receiverId.forEach(receiver => {
@@ -312,7 +386,7 @@ const editGroupChat = async (req, res) => {
         convo.members = newMembers;
         convo.membersKey = newMembers.sort().join("_");
         if(convo.admin.includes(req.body.leave)){
-          const updatedAdmins = convo.admin.filter((a)=>a.toString()!==req.body.rm);
+          const updatedAdmins = convo.admin.filter((a)=>a.toString()!==req.body.leave);
           convo.admin = updatedAdmins;
         }
         responseTxt = `|SystemGenerated| ${req.user.name} left the group`;
