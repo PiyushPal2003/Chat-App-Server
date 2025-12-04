@@ -118,8 +118,10 @@ const getChats = async(req, res) => {
 
   const chatList = await convoDb.aggregate([
     { 
-      $match: { 
-        members: { $in: [req.params.id] }
+      $match: {
+        $expr: {
+          $in: [ { $toObjectId: req.params.id }, "$members" ]
+        }
       }
     },
     { 
@@ -137,27 +139,52 @@ const getChats = async(req, res) => {
       $project: {
         "members.password": 0,
         "members.email": 0,
-        "members.__v": 0
+        "members.__v": 0,
+        "members.refreshToken": 0
       }
     },
     {
-      $lookup:{
+      $lookup: {
         from: "chats",
         let: { convoId: "$_id" },
         pipeline: [
-          { $match: { $expr: { $eq: [ { $toObjectId: "$conversationId" }, "$$convoId" ] } } },
-          { $sort: { createdAt: -1 } },
-          { $limit: 1 }
+          { $match: { $expr: { $eq: [ "$conversationId", "$$convoId" ] } } },
+          { $sort: { _id: -1 } },
+          { $limit: 1 },
+          { $project: { _id: 0, message: 1} }
         ],
-        as: "allChats"
-      },
+        as: "lastMessage"
+      }
     },
     {
       $unwind: {
-        path: "$allChats",
+        path: "$lastMessage",
         preserveNullAndEmptyArrays: true
       }
-    }
+    },
+    { 
+      $addFields: {
+        lastMessage: { $ifNull: ["$lastMessage", null] }
+      }
+    },
+    // {
+    //   $lookup:{
+    //     from: "chats",
+    //     let: { convoId: "$_id" },
+    //     pipeline: [
+    //       { $match: { $expr: { $eq: [ { $toObjectId: "$conversationId" }, "$$convoId" ] } } },
+    //       { $sort: { createdAt: -1 } },
+    //       { $limit: 1 }
+    //     ],
+    //     as: "allChats"
+    //   },
+    // },
+    // {
+    //   $unwind: {
+    //     path: "$allChats",
+    //     preserveNullAndEmptyArrays: true
+    //   }
+    // }
   ])
 
   console.log("Last Messages:", chatList);
