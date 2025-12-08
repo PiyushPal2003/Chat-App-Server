@@ -151,7 +151,43 @@ const getChats = async(req, res) => {
           { $match: { $expr: { $eq: [ "$conversationId", "$$convoId" ] } } },
           { $sort: { _id: -1 } },
           { $limit: 1 },
-          { $project: { _id: 0, message: 1} }
+          { $project: { 
+            _id: 0,
+            lastMessage: {
+              $cond: [
+                { $and: [
+                    { $gt: [ { $strLenCP: "$message.text" }, 0 ] },
+                    { $eq: [ { $size: "$message.url" }, 0 ] }
+                  ]
+                },  
+                "$message.text",
+                {
+                  $cond: [
+                    { $and: [
+                        { $eq: [ { $strLenCP: "$message.text" }, 0 ] },
+                        { $gt: [ { $size: "$message.url" }, 0 ] }
+                      ]
+                    },
+                    {
+                      $concat: [
+                        { $toString: { $size: "$message.url" } },
+                        " file",
+                        {
+                          $cond: [
+                            { $gt: [ { $size: "$message.url" }, 1 ] },
+                            "s",
+                            ""
+                          ]
+                        }
+                      ]
+                    },
+                    null
+                  ]
+                }
+              ]
+            },
+            lastMessageTime: "$timestamp"
+          } }
         ],
         as: "lastMessage"
       }
@@ -164,7 +200,20 @@ const getChats = async(req, res) => {
     },
     { 
       $addFields: {
-        lastMessage: { $ifNull: ["$lastMessage", null] }
+        lastMessage: { 
+          $cond: [
+            { $ifNull: [ "$lastMessage", false ] },
+            "$lastMessage.lastMessage",
+            null
+          ]
+        },
+        lastMessageTime: { 
+          $cond: [
+            { $ifNull: [ "$lastMessage", false ] },
+            "$lastMessage.lastMessageTime",
+            null
+          ]
+        }
       }
     },
     // {

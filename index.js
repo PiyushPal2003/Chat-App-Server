@@ -63,6 +63,13 @@ io.on("connection", (socket) => {
   //   socket.broadcast.emit("NEW_USER", data);
   // });
 
+  socket.on("typing", (data) => {
+    socket.broadcast.emit("userTyping", data);
+  });
+  socket.on("stopTyping", (data) => {
+    socket.broadcast.emit("userStopTyping", data);
+  });
+
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);
     userSocketIDs.delete(socket.user._id.toString());
