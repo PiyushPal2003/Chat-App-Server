@@ -1,5 +1,5 @@
 const userdb = require('../models/userschema');
-const fs = require("fs");
+const { uploadFile, deleteFile } = require('../utils/supabaseStorage');
 
 const currentUser = async (req, res) => {
   try {
@@ -30,38 +30,20 @@ const users = async (req, res) => {
 
 const editProfile = async (req, res) => {
   try{
-    console.log(req.file);
-    console.log(req.body);
     const {id} = req.user;
     const user = await userdb.findById(id);
-    const admin = require("firebase-admin");
-    const bucket = admin.storage().bucket();
     let publicUrl;
 
     const file = req.file;
     if(file){
-      const alreadyStored = user.profilePhoto.includes('storage.googleapis.com')?user.profilePhoto.split('.appspot.com/')[1] : null;
-
-      if(alreadyStored){
-        const existingFile = bucket.file(alreadyStored);
-        await existingFile.delete().catch((err)=>{
-          console.log("Error deleting existing file:", err);
-        });
+      // Delete old photo if it exists (handles both Firebase and Supabase URLs)
+      if(user.profilePhoto && user.profilePhoto !== 'NA'){
+        await deleteFile(user.profilePhoto);
       }
       
-      const destination = `ChatAppUsersProfilePhoto/${user.name}_${user.email}_${Date.now()}`;
-
-      await bucket.upload(file.path, {
-      destination: destination,
-      metadata: {
-          contentType: file.mimetype,
-      },
-      });
-      fs.unlinkSync(file.path);
-      const uploadedFile = bucket.file(destination);
-      await uploadedFile.makePublic();
-
-      publicUrl = `https://storage.googleapis.com/${bucket.name}/${destination}`;
+      // Upload new photo to Supabase
+      const customName = `${user.name}_${user.email}_${Date.now()}`;
+      publicUrl = await uploadFile(file, 'profiles', customName);
     }
 
     if(req.body.name){
@@ -74,7 +56,7 @@ const editProfile = async (req, res) => {
       user.desc = req.body.desc;
     }
 
-    await user.save({ validateModifiedOnly: true }, );
+    await user.save({ validateModifiedOnly: true });
 
     res.status(200).json({ message: "Profile updated successfully", usr: user });
 

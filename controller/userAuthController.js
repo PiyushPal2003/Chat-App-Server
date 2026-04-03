@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const userdb = require('../models/userschema');
 var jwt = require('jsonwebtoken');
 const { OAuth2Client } = require('google-auth-library');
+const { uploadFile } = require('../utils/supabaseStorage');
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 async function verifyGoogleToken(token) {
@@ -21,8 +22,6 @@ async function verifyGoogleToken(token) {
 const authRegister = async(req, res) => {
     const io = req.app.get("io");
     if(req.body.type == 'Sign up') {
-        const admin = require("firebase-admin");
-        const bucket = admin.storage().bucket();
         let publicUrl;
 
         const usr = await userdb.findOne({email: req.body.email})
@@ -30,21 +29,15 @@ const authRegister = async(req, res) => {
             return res.status(201).json({message: "already registered"});
         }
         
+        // Upload profile photo to Supabase if provided
         const file = req.file;
         if(file){
-            const destination = `ChatAppUsersProfilePhoto/${req.body.name}_${req.body.email}_${Date.now()}`;
-
-            await bucket.upload(file.path, {
-            destination: destination,
-            metadata: {
-                contentType: file.mimetype,
-            },
-            });
-            fs.unlinkSync(file.path);
-            const uploadedFile = bucket.file(destination);
-            await uploadedFile.makePublic();
-
-            publicUrl = `https://storage.googleapis.com/${bucket.name}/${destination}`;
+            try {
+                const customName = `${req.body.name}_${req.body.email}_${Date.now()}`;
+                publicUrl = await uploadFile(file, 'profiles', customName);
+            } catch (err) {
+                console.error("Error uploading profile photo:", err);
+            }
         }
 
         const user = new userdb({
@@ -52,7 +45,6 @@ const authRegister = async(req, res) => {
             email: req.body.email,
             profilePhoto: publicUrl ? publicUrl : 'NA',
             password: req.body.password,
-            // refreshToken: refreshToken
         });
         
         const refreshToken = jwt.sign({ name: req.body.name, email: req.body.email, photo: publicUrl ? publicUrl : 'NA', id : user._id, type: 'Refresh' }, process.env.JWT_SECRET, {expiresIn: '7d'});

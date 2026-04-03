@@ -1,8 +1,7 @@
 const convoDb = require("../models/conversationSchema");
 const chatDb = require("../models/chatschema");
-const fs = require("fs");
-// const chatdb = require("../models/chatschema");
 const UserDb = require("../models/userschema");
+const { uploadFile, deleteFile, uploadMultipleFiles } = require("../utils/supabaseStorage");
 
 const newChat = async(req, res) => {
     try{
@@ -14,7 +13,6 @@ const newChat = async(req, res) => {
           if(existingConvo){
               return  res.status(201).json({ status:201, message: "Chat already exists", chat: existingConvo});
           }
-            // console.log(req.body.id.id);
           const newConvo = new convoDb({
               members: [req.body.id, req.user.id],
           })
@@ -36,57 +34,43 @@ const newChat = async(req, res) => {
 const newGroupChat = async(req, res) => {
   try{
     const user = req.user;
-    console.log("payload", req.body);
-    console.log("payload", req.body.payload);
-        if(req.body.isGroupChat){
-          const admin = require("firebase-admin");
-          const bucket = admin.storage().bucket();
-          let publicUrl;
-          
-          const file = req.file;
-          if(file){
-              const destination = `ChatAppGroupPhoto/${req.body.name}_${req.body.adminId}_${Date.now()}`;
+    if(req.body.isGroupChat){
+      let publicUrl;
+      
+      // Upload group photo to Supabase
+      const file = req.file;
+      if(file){
+        const customName = `${req.body.name}_${req.body.adminId}_${Date.now()}`;
+        publicUrl = await uploadFile(file, 'groups', customName);
+      }
 
-              await bucket.upload(file.path, {
-              destination: destination,
-              metadata: {
-                  contentType: file.mimetype,
-              },
-              });
-              fs.unlinkSync(file.path);
-              const uploadedFile = bucket.file(destination);
-              await uploadedFile.makePublic();
-
-              publicUrl = `https://storage.googleapis.com/${bucket.name}/${destination}`;
-          }
-
-          const newGroup = new convoDb({
-              isGroupChat: true,
-              grpname: req.body.name,
-              description: req.body.grpDesc,
-              members: JSON.parse(req.body.members),
-              admin: req.body.adminId,
-              photo: publicUrl || "NA",
-          })
-          const chat = new chatdb({
-            conversationId: req.body.convoId,
-            senderId: id,
-            receiverId: receiverIds,
-            message: {
-              text: `|SystemGenerated| ${user.name} created the group "${req.body.name}"`,
-            },
-          })
-          await Promise.all([
-            newGroup.save(),
-            chat.save()
-          ])
-          .then(()=>{
-              res.status(200).json({ message: "New Group chat created: "+ req.body.name, chat: newGroup});
-          })
-          .catch((err)=>{
-            res.status(400).json({ message: err });
-          })
-        }
+      const newGroup = new convoDb({
+          isGroupChat: true,
+          grpname: req.body.name,
+          description: req.body.grpDesc,
+          members: JSON.parse(req.body.members),
+          admin: req.body.adminId,
+          photo: publicUrl || "NA",
+      })
+      const chat = new chatDb({
+        conversationId: newGroup._id,
+        senderId: req.body.adminId,
+        receiverId: JSON.parse(req.body.members).filter(m => m !== req.body.adminId),
+        message: {
+          text: `|SystemGenerated| ${user.name} created the group "${req.body.name}"`,
+        },
+      })
+      await Promise.all([
+        newGroup.save(),
+        chat.save()
+      ])
+      .then(()=>{
+          res.status(200).json({ message: "New Group chat created: "+ req.body.name, chat: newGroup});
+      })
+      .catch((err)=>{
+        res.status(400).json({ message: err });
+      })
+    }
   }
   catch(err){
     console.log(err);
@@ -265,15 +249,10 @@ const sendChat = async (req, res) => {
     const message = req.body.message;
     const receiverId = JSON.parse(req.body.receiverId);
     const senderId = req.user.id;
-    const admin = require("firebase-admin");
-    const bucket = admin.storage().bucket();
 
     if (!convoId || !senderId || !receiverId) {
       return res.status(400).json({ message: "All fields are required" });
     }
-
-    console.log("Body", req.body);
-    console.log("Files received:", req.files);
 
     let fileUrlArray = [];
 
@@ -282,26 +261,10 @@ const sendChat = async (req, res) => {
       return res.status(404).json({ message: "Chat not Found" });
     }
 
+    // Upload files to Supabase if present
     if (req.files && req.files.length > 0) {
-      // Upload all files
-      for (const file of req.files) {
-        const destination = `ChatAppUsersDoc/${senderId}_${convoId}_${Date.now()}_${file.originalname}`;
-        await bucket.upload(file.path, {
-          destination,
-          metadata: {
-            contentType: file.mimetype,
-          },
-        });
-
-        await fs.promises.unlink(file.path); // non-blocking
-        const uploadedFile = bucket.file(destination);
-
-        // ⚠️ Optional: don't always make public; better to generate signed URL
-        await uploadedFile.makePublic();
-
-        const url = `https://storage.googleapis.com/${bucket.name}/${destination}`;
-        fileUrlArray.push(url);
-      }
+      const prefix = `${senderId}_${convoId}`;
+      fileUrlArray = await uploadMultipleFiles(req.files, 'chat-files', prefix);
     }
 
     const chat = new chatDb({
@@ -315,10 +278,6 @@ const sendChat = async (req, res) => {
     });
 
     await chat.save();
-
-    // Update last message in conversation
-    // chatConvoDB.lastMessage = message ? message : fileUrlArray[0].split("_").pop();
-    // await chatConvoDB.save();
 
     // Send to receiver if online
     receiverId.forEach(receiver => {
@@ -373,47 +332,26 @@ const fetchMessages = async (req, res) => {
 
 const editGroupChat = async (req, res) => {
     try{
-      console.log(req.file);
-      console.log(req.body);
       const io = req.app.get("io");
       const userSocketIDs = req.app.get("userSocketIDs");
       const {id} = req.user;
       const convo = await convoDb.findById(req.body.convoId);
       const receivers = convo.members.filter(memberId => memberId.toString() !== id);
       let receiverIds = receivers.map(memberId => memberId.toString());
-      console.log('receivers:', receiverIds);
-      const admin = require("firebase-admin");
-      const bucket = admin.storage().bucket();
       let publicUrl;
       let newAdmin;
       let responseTxt = "";
   
       const file = req.file;
       if(file){
-        const alreadyStored = convo.photo.includes('storage.googleapis.com')?convo.photo.split('.appspot.com/')[1] : null;
-  
-        if(alreadyStored){
-          const existingFile = bucket.file(alreadyStored);
-          await existingFile.delete().catch((err)=>{
-            console.log("Error deleting existing file:", err);
-            res.status(500).json({ error: "Error while deleting previous photo" });
-          });
+        // Delete old photo if exists (handles both Firebase and Supabase URLs)
+        if(convo.photo && convo.photo !== 'NA'){
+          await deleteFile(convo.photo);
         }
         
-        // const destination = `ChatAppUsersProfilePhoto/${user.name}_${user.email}_${Date.now()}`;
-        const destination = `ChatAppGroupPhoto/${req.body.old_grpname}_UpdatedGroupPhoto_By_${req.body.user}(${id})_${Date.now()}`;
-  
-        await bucket.upload(file.path, {
-        destination: destination,
-        metadata: {
-            contentType: file.mimetype,
-        },
-        });
-        fs.unlinkSync(file.path);
-        const uploadedFile = bucket.file(destination);
-        await uploadedFile.makePublic();
-  
-        publicUrl = `https://storage.googleapis.com/${bucket.name}/${destination}`;
+        // Upload new photo to Supabase
+        const customName = `${req.body.old_grpname}_UpdatedBy_${req.body.user}_${Date.now()}`;
+        publicUrl = await uploadFile(file, 'groups', customName);
       }
   
       if(req.body.name){

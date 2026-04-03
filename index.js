@@ -5,15 +5,8 @@ const router = require('./routes');
 const http = require('http');
 const userdb = require('./models/userschema');
 const cookieParser = require('cookie-parser')
-const admin = require("firebase-admin");
 const { Server } = require("socket.io");
-const serviceAccount = require("./serviceAccountKey.json");
 const {socketAuthenticator} = require('./controller/userAuthController.js');
-
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  storageBucket: process.env.FIREBASE_BUCKET_PATH
-});
 
 const app = express();
 const server = http.createServer(app);
