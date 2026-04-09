@@ -316,12 +316,13 @@ const fetchMessages = async (req, res) => {
     // }
     // const messages = await chatDb.find(query).limit(15);
 
-    if(messages.length < 15){
-      res.status(200).json({ message: "Batch of 15 Messages", messages, conversation });
-    }
-    else{
-      res.status(201).json({ message: "Last batch of Messages", messages, conversation });
-    }
+    const hasMore = messages.length === 15;
+    res.status(200).json({
+      message: hasMore ? "Batch of 15 Messages" : "Last batch of Messages",
+      hasMore,
+      messages,
+      conversation,
+    });
 
   }
   catch(err){
