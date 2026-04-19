@@ -67,6 +67,12 @@ router.get('/fetchchat/:id', verifyToken, userChatsController.fetchChatDetails);
 //send chat
 router.post('/sendchat/:id', verifyToken, upload.array("files"), userChatsController.sendChat);
 
+//forward message
+router.post('/forwardchat', verifyToken, userChatsController.forwardChat);
+
+//edit message
+router.patch('/editmessage/:messageId', verifyToken, userChatsController.editMessage);
+
 //fetch Messages
 router.get('/fetchmessages', verifyToken, userChatsController.fetchMessages);
 

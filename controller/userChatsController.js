@@ -135,9 +135,9 @@ const getChats = async(req, res) => {
           { $match: { $expr: { $eq: [ "$conversationId", "$$convoId" ] } } },
           { $sort: { _id: -1 } },
           { $limit: 1 },
-          { $project: { 
-            _id: 0,
-            lastMessage: {
+           { $project: { 
+             _id: 0,
+             lastMessage: {
               $cond: [
                 { $and: [
                     { $gt: [ { $strLenCP: "$message.text" }, 0 ] },
@@ -169,11 +169,12 @@ const getChats = async(req, res) => {
                   ]
                 }
               ]
-            },
-            lastMessageTime: "$timestamp"
-          } }
-        ],
-        as: "lastMessage"
+             },
+             lastMessageTime: "$timestamp",
+             lastMessageEdited: "$isEdited"
+           } }
+         ],
+         as: "lastMessage"
       }
     },
     {
@@ -196,6 +197,13 @@ const getChats = async(req, res) => {
             { $ifNull: [ "$lastMessage", false ] },
             "$lastMessage.lastMessageTime",
             null
+          ]
+        },
+        lastMessageEdited: {
+          $cond: [
+            { $ifNull: [ "$lastMessage", false ] },
+            "$lastMessage.lastMessageEdited",
+            false
           ]
         }
       }
@@ -249,22 +257,66 @@ const sendChat = async (req, res) => {
     const message = req.body.message;
     const receiverId = JSON.parse(req.body.receiverId);
     const senderId = req.user.id;
+    const replyToId = req.body.replyToId || null;
+    let mentionUserIds = [];
 
     if (!convoId || !senderId || !receiverId) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
     let fileUrlArray = [];
+    let replyTo = undefined;
 
     const chatConvoDB = await convoDb.findById(convoId);
     if (!chatConvoDB) {
       return res.status(404).json({ message: "Chat not Found" });
+    }
+    if (req.body.mentions) {
+      try {
+        mentionUserIds = JSON.parse(req.body.mentions);
+      } catch (parseError) {
+        return res.status(400).json({ message: "Invalid mentions format" });
+      }
+      if (!Array.isArray(mentionUserIds)) {
+        return res.status(400).json({ message: "Mentions must be an array" });
+      }
+    }
+
+    if (replyToId) {
+      const repliedMessage = await chatDb.findById(replyToId);
+      if (!repliedMessage) {
+        return res.status(404).json({ message: "Replied message not found" });
+      }
+      if (String(repliedMessage.conversationId) !== String(convoId)) {
+        return res.status(400).json({ message: "Reply message must belong to same conversation" });
+      }
+
+      replyTo = {
+        messageId: repliedMessage._id,
+        senderId: repliedMessage.senderId,
+        text: repliedMessage.message?.text || "",
+      };
     }
 
     // Upload files to Supabase if present
     if (req.files && req.files.length > 0) {
       const prefix = `${senderId}_${convoId}`;
       fileUrlArray = await uploadMultipleFiles(req.files, 'chat-files', prefix);
+    }
+
+    let mentions = [];
+    if (chatConvoDB.isGroupChat && mentionUserIds.length > 0) {
+      const uniqueMentionIds = Array.from(
+        new Set(
+          mentionUserIds
+            .map((id) => String(id))
+            .filter((id) => id !== String(senderId) && chatConvoDB.members.some((m) => String(m) === id))
+        )
+      );
+      if (uniqueMentionIds.length > 0) {
+        const mentionUsers = await UserDb.find({ _id: { $in: uniqueMentionIds } }).select("_id name");
+        mentions = mentionUsers.map((u) => ({ userId: u._id, name: u.name }));
+      }
     }
 
     const chat = new chatDb({
@@ -275,6 +327,8 @@ const sendChat = async (req, res) => {
         text: message ? message : undefined,
         url: fileUrlArray.length > 0 ? fileUrlArray : undefined,
       },
+      mentions,
+      replyTo,
     });
 
     await chat.save();
@@ -294,6 +348,136 @@ const sendChat = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Chat not sent, Server Error" });
+  }
+};
+
+const forwardChat = async (req, res) => {
+  try {
+    const io = req.app.get("io");
+    const userSocketIDs = req.app.get("userSocketIDs");
+    const senderId = req.user.id;
+    const { sourceMessageId, targetConversationIds } = req.body;
+
+    if (!sourceMessageId || !Array.isArray(targetConversationIds) || targetConversationIds.length === 0) {
+      return res.status(400).json({ message: "sourceMessageId and targetConversationIds are required" });
+    }
+
+    const sourceMessage = await chatDb.findById(sourceMessageId);
+    if (!sourceMessage) {
+      return res.status(404).json({ message: "Source message not found" });
+    }
+
+    const uniqueConversationIds = Array.from(new Set(targetConversationIds.map((id) => String(id))));
+    const conversations = await convoDb.find({ _id: { $in: uniqueConversationIds }, members: senderId });
+    const conversationMap = new Map(conversations.map((convo) => [String(convo._id), convo]));
+
+    const invalidConversations = uniqueConversationIds.filter((id) => !conversationMap.has(id));
+    if (invalidConversations.length > 0) {
+      return res.status(403).json({ message: "You can only forward to conversations you are part of" });
+    }
+
+    const forwardedPayload = {
+      text: sourceMessage.message?.text || "",
+      url: Array.isArray(sourceMessage.message?.url) ? sourceMessage.message.url : [],
+    };
+
+    const forwardedChats = [];
+    for (const convoId of uniqueConversationIds) {
+      const convo = conversationMap.get(convoId);
+      const receiverIds = convo.members
+        .map((memberId) => String(memberId))
+        .filter((memberId) => memberId !== String(senderId));
+
+      const forwardedChat = new chatDb({
+        conversationId: convo._id,
+        senderId,
+        receiverId: receiverIds,
+        message: forwardedPayload,
+        forwardInfo: {
+          isForwarded: true,
+          sourceMessageId: sourceMessage._id,
+          originalSenderId: sourceMessage.senderId,
+        },
+      });
+
+      await forwardedChat.save();
+      forwardedChats.push(forwardedChat);
+
+      receiverIds.forEach((receiver) => {
+        const receiverSocket = userSocketIDs.get(receiver);
+        if (receiverSocket) {
+          io.to(receiverSocket).emit("newMessage", forwardedChat);
+        }
+      });
+    }
+
+    return res.status(200).json({
+      message: "Message forwarded successfully",
+      chats: forwardedChats,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Message not forwarded, Server Error" });
+  }
+};
+
+const editMessage = async (req, res) => {
+  try {
+    const io = req.app.get("io");
+    const userSocketIDs = req.app.get("userSocketIDs");
+    const senderId = req.user.id;
+    const messageId = req.params.messageId;
+    const newText = (req.body.message || "").trim();
+
+    if (!messageId) {
+      return res.status(400).json({ message: "messageId is required" });
+    }
+    if (!newText) {
+      return res.status(400).json({ message: "Edited message cannot be empty" });
+    }
+
+    const chat = await chatDb.findById(messageId);
+    if (!chat) {
+      return res.status(404).json({ message: "Message not found" });
+    }
+    if (String(chat.senderId) !== String(senderId)) {
+      return res.status(403).json({ message: "You can only edit your own messages" });
+    }
+    if (Array.isArray(chat.message?.url) && chat.message.url.length > 0) {
+      return res.status(400).json({ message: "Messages with attachments cannot be edited" });
+    }
+    if (chat.message?.text?.includes?.("|SystemGenerated|")) {
+      return res.status(400).json({ message: "System messages cannot be edited" });
+    }
+    if (chat.forwardInfo?.isForwarded || chat.message?.text?.includes?.("|Forwarded|")) {
+      return res.status(400).json({ message: "Forwarded messages cannot be edited" });
+    }
+
+    const fifteenMinutesMs = 15 * 60 * 1000;
+    const messageAgeMs = Date.now() - new Date(chat.timestamp).getTime();
+    if (messageAgeMs > fifteenMinutesMs) {
+      return res.status(400).json({ message: "Edit window expired. You can edit only within 15 minutes." });
+    }
+
+    chat.message.text = newText;
+    chat.isEdited = true;
+    chat.editedAt = new Date();
+    await chat.save();
+
+    chat.receiverId.forEach((receiver) => {
+      const receiverSocket = userSocketIDs.get(String(receiver));
+      if (receiverSocket) {
+        io.to(receiverSocket).emit("messageEdited", chat);
+      }
+    });
+
+    return res.status(200).json({
+      message: "Message edited successfully",
+      chat,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Message not edited, Server Error" });
   }
 };
 
@@ -407,7 +591,7 @@ const editGroupChat = async (req, res) => {
         responseTxt = `|SystemGenerated| ${req.user.name} left the group`;
       }
 
-      const chat = new chatdb({
+      const chat = new chatDb({
         conversationId: req.body.convoId,
         senderId: id,
         receiverId: receiverIds,
@@ -442,4 +626,4 @@ const editGroupChat = async (req, res) => {
 }
 
 
-module.exports = { newChat, getChats, fetchChatDetails, sendChat, fetchMessages, newGroupChat, editGroupChat};
+module.exports = { newChat, getChats, fetchChatDetails, sendChat, forwardChat, editMessage, fetchMessages, newGroupChat, editGroupChat};

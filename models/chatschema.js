@@ -20,6 +20,44 @@ const chat_data = new mongoose.Schema({
     text: { type: String, default: "" },
     url: [{ type: String, default: "" }],
   },
+  mentions: [
+    {
+      userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "user_details",
+        required: true,
+      },
+      name: { type: String, required: true },
+    },
+  ],
+  replyTo: {
+    messageId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "chat",
+      default: null,
+    },
+    senderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "user_details",
+      default: null,
+    },
+    text: { type: String, default: "" },
+  },
+  forwardInfo: {
+    isForwarded: { type: Boolean, default: false },
+    sourceMessageId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "chat",
+      default: null,
+    },
+    originalSenderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "user_details",
+      default: null,
+    },
+  },
+  isEdited: { type: Boolean, default: false },
+  editedAt: { type: Date, default: null },
   timestamp: { type: Date, default: Date.now },
 });
 
