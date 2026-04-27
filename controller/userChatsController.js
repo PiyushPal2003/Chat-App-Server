@@ -235,9 +235,23 @@ const getChats = async(req, res) => {
 
 const fetchChatDetails = async(req, res) => {
     try{
-        const chatDetails = await convoDb.findById(req.params.id).populate("members", "-password -__v");
+        const [chatDetails, attachmentMessages] = await Promise.all([
+          convoDb.findById(req.params.id).populate("members", "-password -__v"),
+          chatDb
+            .find({
+              conversationId: req.params.id,
+              "message.url.0": { $exists: true },
+            })
+            .select("message.url")
+            .sort({ timestamp: -1 }),
+        ]);
+        const convoAttachment = attachmentMessages.flatMap((msg) => msg?.message?.url || []);
         if(chatDetails){
-            res.status(200).json({ message: "Chat details fetched", chat: chatDetails });
+            res.status(200).json({
+              message: "Chat details fetched",
+              chat: chatDetails,
+              convoAttachment,
+            });
         }
         else{
             res.status(404).json({ message: "Chat not Found" });
