@@ -495,6 +495,96 @@ const editMessage = async (req, res) => {
   }
 };
 
+const deleteMessage = async (req, res) => {
+  try {
+    const io = req.app.get("io");
+    const userSocketIDs = req.app.get("userSocketIDs");
+    const messageId = req.params.messageId;
+    const deletionStatus = req.status;
+    const deletedBy = String(req.user.id);
+    const deletedByName = req.user.name;
+
+    if (!messageId || !deletionStatus) {
+      return res.status(400).json({ message: "messageId and status are required" });
+    }
+    if (deletionStatus !== "me" && deletionStatus !== "everyone") {
+      return res.status(400).json({ message: "status must be either 'me' or 'everyone'" });
+    }
+
+    const chat = await chatDb.findById(messageId);
+    if (!chat) {
+      return res.status(404).json({ message: "Message not found, invalid messageId" });
+    }
+
+    const convo = await convoDb.findById(chat.conversationId);
+    if (!convo) {
+      return res.status(404).json({ message: "Conversation not found" });
+    }
+
+    const isMember = convo.members.some((memberId) => String(memberId) === deletedBy);
+    if (!isMember) {
+      return res.status(403).json({ message: "You are not a member of this conversation" });
+    }
+    const isAdmin = (convo.admin || []).some((adminId) => String(adminId) === deletedBy);
+
+    if(deletionStatus == "me"){
+      const alreadyDeletedFor = chat.deleted.for.map(id => String(id));
+      if(!alreadyDeletedFor.includes(deletedBy)){
+        chat.deleted.for.push(deletedBy);
+      }
+    }
+    else if(deletionStatus == "everyone"){
+      const isSender = String(chat.senderId) === deletedBy;
+      if (!isSender && !isAdmin) {
+        return res.status(403).json({ message: "You cannot delete this message for everyone" });
+      }
+      if(chat.deleted.status === "everyone"){
+        return res.status(400).json({ message: "Message is already deleted for everyone" });
+      }
+
+      if (!isAdmin) {
+        const fifteenMinutesMs = 15 * 60 * 1000;
+        const messageAgeMs = Date.now() - new Date(chat.timestamp).getTime();
+        if (messageAgeMs > fifteenMinutesMs) {
+          return res.status(400).json({ message: "Delete for everyone window expired. You can delete only within 15 minutes." });
+        }
+      }
+
+      chat.deleted.status = "everyone";
+      chat.deleted.text = isAdmin && !isSender
+        ? `This message was deleted by admin ${deletedByName}`
+        : `This message was deleted for everyone`;
+    }
+    
+    await chat.save();
+
+    //receiver
+    if(deletionStatus == "me"){
+      const requesterSocket = userSocketIDs.get(deletedBy);
+      if (requesterSocket) {
+        io.to(requesterSocket).emit("messageDeleted", { messageId, status: "me" });
+      }
+    }
+    if(deletionStatus == "everyone"){
+      convo.members.forEach((memberId) => {
+        const memberSocket = userSocketIDs.get(String(memberId));
+        if (memberSocket) {
+          io.to(memberSocket).emit("messageDeleted", { messageId, status: deletionStatus });
+        }
+      });
+    }
+
+    return res.status(200).json({
+      message: deletionStatus === "everyone" ? "Message deleted for everyone" : "Message deleted for you",
+      chat,
+    });
+  }
+  catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: "Message not deleted, Server Error" });
+  }
+}
+
 const fetchMessages = async (req, res) => {
   try{
     const convoId = req.query.chatId;
@@ -640,4 +730,4 @@ const editGroupChat = async (req, res) => {
 }
 
 
-module.exports = { newChat, getChats, fetchChatDetails, sendChat, forwardChat, editMessage, fetchMessages, newGroupChat, editGroupChat};
+module.exports = { newChat, getChats, fetchChatDetails, sendChat, forwardChat, editMessage, deleteMessage, fetchMessages, newGroupChat, editGroupChat};

@@ -73,6 +73,9 @@ router.post('/forwardchat', verifyToken, userChatsController.forwardChat);
 //edit message
 router.patch('/editmessage/:messageId', verifyToken, userChatsController.editMessage);
 
+//delete message
+router.delete('/deletemessage/:messageId', verifyToken, userChatsController.deleteMessage);
+
 //fetch Messages
 router.get('/fetchmessages', verifyToken, userChatsController.fetchMessages);
 

@@ -57,6 +57,16 @@ const chat_data = new mongoose.Schema({
     },
   },
   isEdited: { type: Boolean, default: false },
+  deleted: {
+    for: [{type: mongoose.Schema.Types.ObjectId, ref: "user_details", default: null}],
+    text: { type: String, default: "" },
+    //below only for the message owner
+    status: {
+      type: String,
+      enum: ["none", "admin", "everyone"],
+      default: "none"
+    }
+  },
   editedAt: { type: Date, default: null },
   timestamp: { type: Date, default: Date.now },
 });
