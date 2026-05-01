@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const convoDb = require("../models/conversationSchema");
 const chatDb = require("../models/chatschema");
 const UserDb = require("../models/userschema");
@@ -499,16 +500,16 @@ const deleteMessage = async (req, res) => {
   try {
     const io = req.app.get("io");
     const userSocketIDs = req.app.get("userSocketIDs");
-    const messageId = req.params.messageId;
-    const deletionStatus = req.status;
+    const messageId = req.body.messageId;
+    const deletionStatus = req.body.status;
     const deletedBy = String(req.user.id);
     const deletedByName = req.user.name;
 
     if (!messageId || !deletionStatus) {
       return res.status(400).json({ message: "messageId and status are required" });
     }
-    if (deletionStatus !== "me" && deletionStatus !== "everyone") {
-      return res.status(400).json({ message: "status must be either 'me' or 'everyone'" });
+    if (deletionStatus !== "me" && deletionStatus !== "everyone" && deletionStatus !== "admin") {
+      return res.status(400).json({ message: "status must be either 'me', 'everyone', or 'admin'" });
     }
 
     const chat = await chatDb.findById(messageId);
@@ -559,17 +560,22 @@ const deleteMessage = async (req, res) => {
     await chat.save();
 
     //receiver
-    if(deletionStatus == "me"){
-      const requesterSocket = userSocketIDs.get(deletedBy);
-      if (requesterSocket) {
-        io.to(requesterSocket).emit("messageDeleted", { messageId, status: "me" });
-      }
-    }
+    // if(deletionStatus == "me"){
+    //   const requesterSocket = userSocketIDs.get(deletedBy);
+    //   if (requesterSocket) {
+    //     io.to(requesterSocket).emit("messageDeleted", { messageId, status: "me" });
+    //   }
+    // }
     if(deletionStatus == "everyone"){
       convo.members.forEach((memberId) => {
         const memberSocket = userSocketIDs.get(String(memberId));
         if (memberSocket) {
-          io.to(memberSocket).emit("messageDeleted", { messageId, status: deletionStatus });
+          io.to(memberSocket).emit("messageDeleted", {
+            messageId,
+            status: deletionStatus,
+            chat,
+            conversationId: chat.conversationId,
+          });
         }
       });
     }
@@ -585,39 +591,201 @@ const deleteMessage = async (req, res) => {
   }
 }
 
+// const fetchMessages = async (req, res) => {
+//   try{
+//     const convoId = req.query.chatId;
+//     const lastMessageId = req.query.lastMessageId || null;
+//     console.log(lastMessageId);
+
+//     let query = { conversationId: convoId };
+//     if (lastMessageId) {
+//       query._id = { $lt: lastMessageId };
+//     }
+
+//     const conversation = await convoDb.findById(convoId);
+//     const messages = await chatDb.find(query).sort({ _id: -1 }).limit(15);
+//     //here we get data in descending order so we need to reverse it
+//     // if(lastMessageId == null){
+//       messages.reverse();
+//     // }
+//     // const messages = await chatDb.find(query).limit(15);
+
+//     const hasMore = messages.length === 15;
+//     res.status(200).json({
+//       message: hasMore ? "Batch of 15 Messages" : "Last batch of Messages",
+//       hasMore,
+//       messages,
+//       conversation,
+//     });
+
+//   }
+//   catch(err){
+//     console.log(err);
+//     res.status(500).json({ message: "Messages not fetched, Server Error" });
+//   }
+// }
+
 const fetchMessages = async (req, res) => {
-  try{
+  try {
     const convoId = req.query.chatId;
     const lastMessageId = req.query.lastMessageId || null;
-    console.log(lastMessageId);
+    const currentUserId = req.user.id;
 
-    let query = { conversationId: convoId };
+    let matchStage = {
+      conversationId: new mongoose.Types.ObjectId(convoId),
+    };
+
     if (lastMessageId) {
-      query._id = { $lt: lastMessageId };
+      matchStage._id = {
+        $lt: new mongoose.Types.ObjectId(lastMessageId),
+      };
     }
 
     const conversation = await convoDb.findById(convoId);
-    const messages = await chatDb.find(query).sort({ _id: -1 }).limit(15);
-    //here we get data in descending order so we need to reverse it
-    // if(lastMessageId == null){
-      messages.reverse();
-    // }
-    // const messages = await chatDb.find(query).limit(15);
+
+    const messages = await chatDb.aggregate([
+      {
+        $match: matchStage,
+      },
+
+      {
+        $sort: { _id: -1 },
+      },
+
+      {
+        $limit: 15,
+      },
+
+      {
+        $addFields: {
+          isDeletedForUser: {
+            $in: [
+              new mongoose.Types.ObjectId(currentUserId),
+              { $ifNull: ["$deleted.for", []] }
+            ]
+          },
+
+          isDeletedForEveryone: {
+            $ne: [
+              { $ifNull: ["$deleted.status", "none"] },
+              "none"
+            ]
+          }
+        }
+      },
+
+      {
+        $project: {
+          _id: 1,
+          conversationId: 1,
+          senderId: 1,
+          receiverId: 1,
+          timestamp: 1,
+          deleted: 1,
+
+          message: {
+            $cond: [
+              {
+                $or: [
+                  "$isDeletedForUser",
+                  "$isDeletedForEveryone",
+                ],
+              },
+              "$$REMOVE",
+              "$message",
+            ],
+          },
+
+          mentions: {
+            $cond: [
+              {
+                $or: [
+                  "$isDeletedForUser",
+                  "$isDeletedForEveryone",
+                ],
+              },
+              "$$REMOVE",
+              "$mentions",
+            ],
+          },
+
+          replyTo: {
+            $cond: [
+              {
+                $or: [
+                  "$isDeletedForUser",
+                  "$isDeletedForEveryone",
+                ],
+              },
+              "$$REMOVE",
+              "$replyTo",
+            ],
+          },
+
+          forwardInfo: {
+            $cond: [
+              {
+                $or: [
+                  "$isDeletedForUser",
+                  "$isDeletedForEveryone",
+                ],
+              },
+              "$$REMOVE",
+              "$forwardInfo",
+            ],
+          },
+
+          isEdited: {
+            $cond: [
+              {
+                $or: [
+                  "$isDeletedForUser",
+                  "$isDeletedForEveryone",
+                ],
+              },
+              "$$REMOVE",
+              "$isEdited",
+            ],
+          },
+
+          editedAt: {
+            $cond: [
+              {
+                $or: [
+                  "$isDeletedForUser",
+                  "$isDeletedForEveryone",
+                ],
+              },
+              "$$REMOVE",
+              "$editedAt",
+            ],
+          },
+        },
+      },
+
+      {
+        $sort: { _id: 1 },
+      },
+    ]);
 
     const hasMore = messages.length === 15;
+
     res.status(200).json({
-      message: hasMore ? "Batch of 15 Messages" : "Last batch of Messages",
+      message: hasMore
+        ? "Batch of 15 Messages"
+        : "Last batch of Messages",
       hasMore,
       messages,
       conversation,
     });
-
-  }
-  catch(err){
+  } catch (err) {
     console.log(err);
-    res.status(500).json({ message: "Messages not fetched, Server Error" });
+    res.status(500).json({
+      message: "Messages not fetched, Server Error",
+    });
   }
-}
+};
+
 
 const editGroupChat = async (req, res) => {
     try{
