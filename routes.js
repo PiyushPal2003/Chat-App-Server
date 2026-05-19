@@ -76,6 +76,9 @@ router.patch('/editmessage/:messageId', verifyToken, userChatsController.editMes
 //delete message
 router.delete('/deletemessage', verifyToken, userChatsController.deleteMessage);
 
+//mark message seen
+router.post('/seenmessage', verifyToken, userChatsController.seenMessage);
+
 //fetch Messages
 router.get('/fetchmessages', verifyToken, userChatsController.fetchMessages);
 

@@ -786,6 +786,95 @@ const fetchMessages = async (req, res) => {
   }
 };
 
+const seenMessage = async (req, res) => {
+  try {
+    const io = req.app.get("io");
+    const userSocketIDs = req.app.get("userSocketIDs");
+    const { messageId, convoId } = req.body;
+    const userId = req.user.id;
+    const seenAt = new Date();
+
+    if (!messageId || !convoId) {
+      return res.status(400).json({ message: "convoId and messageId are required" });
+    }
+    if (!mongoose.Types.ObjectId.isValid(messageId) || !mongoose.Types.ObjectId.isValid(convoId)) {
+      return res.status(400).json({ message: "Invalid convoId or messageId" });
+    }
+
+    const convo = await convoDb.findById(convoId);
+    if (!convo) {
+      return res.status(404).json({ message: "Conversation not found" });
+    }
+    if (!convo.members.some((memberId) => String(memberId) === String(userId))) {
+      return res.status(403).json({ message: "You are not a member of this conversation" });
+    }
+
+    const targetMessage = await chatDb.findOne({
+      _id: new mongoose.Types.ObjectId(messageId),
+      conversationId: new mongoose.Types.ObjectId(convoId),
+    }).select("_id conversationId");
+    if (!targetMessage) {
+      return res.status(404).json({ message: "Message not found in this conversation" });
+    }
+
+    if (!convo.readState) {
+      convo.readState = new Map();
+    }
+    const existingReadState = convo.readState?.get(String(userId));
+    const existingLastSeenId = existingReadState?.lastSeenMessageId;
+    if (existingLastSeenId) {
+      const hasForwardProgress = await chatDb.exists({
+        conversationId: new mongoose.Types.ObjectId(convoId),
+        _id: {
+          $gt: new mongoose.Types.ObjectId(existingLastSeenId),
+          $lte: new mongoose.Types.ObjectId(messageId),
+        },
+      });
+      if (!hasForwardProgress) {
+        return res.status(200).json({
+          message: "Seen state already up to date",
+          readState: {
+            userId,
+            lastSeenMessageId: existingLastSeenId,
+            seenAt: existingReadState.seenAt,
+          },
+        });
+      }
+    }
+
+    convo.readState.set(String(userId), {
+      lastSeenMessageId: targetMessage._id,
+      seenAt,
+    });
+    await convo.save({ validateModifiedOnly: true });
+
+    convo.members.forEach((memberId) => {
+      if (String(memberId) === String(userId)) return;
+      const memberSocket = userSocketIDs.get(String(memberId));
+      if (memberSocket) {
+        io.to(memberSocket).emit("messagesSeen", {
+          conversationId: convo._id,
+          readerId: userId,
+          lastSeenMessageId: targetMessage._id,
+          seenAt,
+        });
+      }
+    });
+
+    return res.status(200).json({
+      message: "Message marked as seen",
+      readState: {
+        userId,
+        lastSeenMessageId: targetMessage._id,
+        seenAt,
+      },
+    });
+  } catch (err) {
+    console.log(err);
+    return res.status(500).json({ message: "Error in marking message as seen" });
+  }
+};
+
 
 const editGroupChat = async (req, res) => {
     try{
@@ -898,4 +987,4 @@ const editGroupChat = async (req, res) => {
 }
 
 
-module.exports = { newChat, getChats, fetchChatDetails, sendChat, forwardChat, editMessage, deleteMessage, fetchMessages, newGroupChat, editGroupChat};
+module.exports = { newChat, getChats, fetchChatDetails, sendChat, forwardChat, editMessage, deleteMessage, fetchMessages, seenMessage, newGroupChat, editGroupChat};

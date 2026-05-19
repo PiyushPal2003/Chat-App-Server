@@ -3,7 +3,10 @@ require('./connect');
 const cors = require('cors');
 const router = require('./routes');
 const http = require('http');
+const mongoose = require('mongoose');
 const userdb = require('./models/userschema');
+const convoDb = require('./models/conversationSchema');
+const chatDb = require('./models/chatschema');
 const cookieParser = require('cookie-parser')
 const { Server } = require("socket.io");
 const {socketAuthenticator} = require('./controller/userAuthController.js');
@@ -61,6 +64,58 @@ io.on("connection", (socket) => {
   });
   socket.on("stopTyping", (data) => {
     socket.broadcast.emit("userStopTyping", data);
+  });
+  socket.on("markSeen", async ({ convoId, messageId }) => {
+    try {
+      const userId = socket.user._id;
+      if (!convoId || !messageId) return;
+      if (!mongoose.Types.ObjectId.isValid(convoId) || !mongoose.Types.ObjectId.isValid(messageId)) return;
+
+      const convo = await convoDb.findById(convoId);
+      if (!convo) return;
+      if (!convo.members.some((memberId) => String(memberId) === String(userId))) return;
+
+      const targetMessage = await chatDb.findOne({
+        _id: messageId,
+        conversationId: convoId,
+      }).select("_id");
+      if (!targetMessage) return;
+
+      if (!convo.readState) {
+        convo.readState = new Map();
+      }
+      const existingReadState = convo.readState?.get(String(userId));
+      const existingLastSeenId = existingReadState?.lastSeenMessageId;
+      if (existingLastSeenId) {
+        const hasForwardProgress = await chatDb.exists({
+          conversationId: convo._id,
+          _id: { $gt: existingLastSeenId, $lte: targetMessage._id },
+        });
+        if (!hasForwardProgress) return;
+      }
+
+      const seenAt = new Date();
+      convo.readState.set(String(userId), {
+        lastSeenMessageId: targetMessage._id,
+        seenAt,
+      });
+      await convo.save({ validateModifiedOnly: true });
+
+      convo.members.forEach((memberId) => {
+        if (String(memberId) === String(userId)) return;
+        const memberSocket = userSocketIDs.get(String(memberId));
+        if (memberSocket) {
+          io.to(memberSocket).emit("messagesSeen", {
+            conversationId: convo._id,
+            readerId: String(userId),
+            lastSeenMessageId: targetMessage._id,
+            seenAt,
+          });
+        }
+      });
+    } catch (err) {
+      console.error("markSeen socket error:", err);
+    }
   });
 
   socket.on("disconnect", () => {

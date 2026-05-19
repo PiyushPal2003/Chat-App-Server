@@ -45,6 +45,25 @@ const conversationSchema = new mongoose.Schema({
     type: String,
   },
   isGroupChat:{ type: Boolean, default: false },
+  readState: {
+    type: Map,
+    of: new mongoose.Schema(
+      {
+        lastSeenMessageId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "chat",
+        },
+
+        seenAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+      { _id: false }
+    ),
+
+    default: {},
+  },
   timestamp: {
     type: Date,
     default: Date.now,
