@@ -81,26 +81,6 @@ const newGroupChat = async(req, res) => {
 
 const getChats = async(req, res) => {
 
-  // const chatList = await convoDb.find({ members: { $in: [req.params.id] }})
-  //                                 .populate("members", "-password -email -__v")
-  //                                 .sort({ updatedAt: -1 });
-  // const convoIds = chatList.map(chat => chat._id);
-  // console.log("Convo Ids:", convoIds);
-
-  // const lastMessages = await chatDb.aggregate([
-  //   { $match: { conversationId: { $in: convoIds } } },
-  //   // { $sort: { createdAt: -1 } },
-  //   {
-  //     $group: {
-  //       _id: "$conversationId",
-  //       conversationId: { $first: "$conversationId" },
-  //       message: { $first: "$message" },
-  //       createdAt: { $first: "$createdAt" },
-  //     }
-  //   },
-  //   { $sort: { createdAt: -1 } }
-  // ]);
-
   const chatList = await convoDb.aggregate([
     { 
       $match: {
@@ -140,11 +120,7 @@ const getChats = async(req, res) => {
              _id: 0,
              lastMessage: {
               $cond: [
-                { $and: [
-                    { $gt: [ { $strLenCP: "$message.text" }, 0 ] },
-                    { $eq: [ { $size: "$message.url" }, 0 ] }
-                  ]
-                },  
+                { $gt: [ { $strLenCP: "$message.text" }, 0 ] },
                 "$message.text",
                 {
                   $cond: [
@@ -172,7 +148,6 @@ const getChats = async(req, res) => {
               ]
              },
              lastMessageTime: "$timestamp",
-             lastMessageEdited: "$isEdited"
            } }
          ],
          as: "lastMessage"
@@ -206,27 +181,20 @@ const getChats = async(req, res) => {
             "$lastMessage.lastMessageEdited",
             false
           ]
+        },
+        lastSeenMessageId: {
+          $getField: {
+            field: "lastSeenMessageId",
+            input: {
+              $getField: {
+                field: req.params.id,
+                input: "$readState"
+              }
+            }
+          }
         }
       }
     },
-    // {
-    //   $lookup:{
-    //     from: "chats",
-    //     let: { convoId: "$_id" },
-    //     pipeline: [
-    //       { $match: { $expr: { $eq: [ { $toObjectId: "$conversationId" }, "$$convoId" ] } } },
-    //       { $sort: { createdAt: -1 } },
-    //       { $limit: 1 }
-    //     ],
-    //     as: "allChats"
-    //   },
-    // },
-    // {
-    //   $unwind: {
-    //     path: "$allChats",
-    //     preserveNullAndEmptyArrays: true
-    //   }
-    // }
   ])
 
   console.log("Last Messages:", chatList);
@@ -443,6 +411,8 @@ const editMessage = async (req, res) => {
     const senderId = req.user.id;
     const messageId = req.params.messageId;
     const newText = (req.body.message || "").trim();
+    let mentionUserIds = [];
+    let mentions = [];
 
     if (!messageId) {
       return res.status(400).json({ message: "messageId is required" });
@@ -455,6 +425,8 @@ const editMessage = async (req, res) => {
     if (!chat) {
       return res.status(404).json({ message: "Message not found" });
     }
+    const chatConvoDB = await convoDb.findById(chat.conversationId);
+
     if (String(chat.senderId) !== String(senderId)) {
       return res.status(403).json({ message: "You can only edit your own messages" });
     }
@@ -467,6 +439,29 @@ const editMessage = async (req, res) => {
     if (chat.forwardInfo?.isForwarded || chat.message?.text?.includes?.("|Forwarded|")) {
       return res.status(400).json({ message: "Forwarded messages cannot be edited" });
     }
+    if (req.body.mentions) {
+      try {
+        mentionUserIds = JSON.parse(req.body.mentions);
+      } catch (parseError) {
+        return res.status(400).json({ message: "Invalid mentions format" });
+      }
+      if (!Array.isArray(mentionUserIds)) {
+        return res.status(400).json({ message: "Mentions must be an array" });
+      }
+    }
+    if (chatConvoDB.isGroupChat && mentionUserIds.length > 0) {
+      const uniqueMentionIds = Array.from(
+        new Set(
+          mentionUserIds
+            .map((id) => String(id))
+            .filter((id) => id !== String(senderId) && chatConvoDB.members.some((m) => String(m) === id))
+        )
+      );
+      if (uniqueMentionIds.length > 0) {
+        const mentionUsers = await UserDb.find({ _id: { $in: uniqueMentionIds } }).select("_id name");
+        mentions = mentionUsers.map((u) => ({ userId: u._id, name: u.name }));
+      }
+    }
 
     const fifteenMinutesMs = 15 * 60 * 1000;
     const messageAgeMs = Date.now() - new Date(chat.timestamp).getTime();
@@ -477,6 +472,7 @@ const editMessage = async (req, res) => {
     chat.message.text = newText;
     chat.isEdited = true;
     chat.editedAt = new Date();
+    chat.mentions = mentions;
     await chat.save();
 
     chat.receiverId.forEach((receiver) => {
