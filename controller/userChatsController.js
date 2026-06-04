@@ -483,7 +483,7 @@ const editMessage = async (req, res) => {
 
     // Upload files to Supabase if present
     if (req.files && req.files.length > 0) {
-      const prefix = `${senderId}_${convoId}`;
+      const prefix = `${senderId}_${chat.conversationId}`;
       fileUrlArray = await uploadMultipleFiles(req.files, 'chat-files', prefix);
     }
     chat.message.text = newText;
