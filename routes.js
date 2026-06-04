@@ -71,7 +71,7 @@ router.post('/sendchat/:id', verifyToken, upload.array("files"), userChatsContro
 router.post('/forwardchat', verifyToken, userChatsController.forwardChat);
 
 //edit message
-router.patch('/editmessage/:messageId', verifyToken, userChatsController.editMessage);
+router.patch('/editmessage/:messageId', verifyToken, upload.array("files"), userChatsController.editMessage);
 
 //delete message
 router.delete('/deletemessage', verifyToken, userChatsController.deleteMessage);

@@ -117,7 +117,7 @@ const getChats = async(req, res) => {
           { $sort: { _id: -1 } },
           { $limit: 1 },
            { $project: { 
-             _id: 0,
+             _id: 1,
              lastMessage: {
               $cond: [
                 { $gt: [ { $strLenCP: "$message.text" }, 0 ] },
@@ -161,6 +161,13 @@ const getChats = async(req, res) => {
     },
     { 
       $addFields: {
+        lastMessageId: { 
+          $cond: [
+            { $ifNull: [ "$lastMessage", false ] },
+            "$lastMessage._id",
+            null
+          ]
+        },
         lastMessage: { 
           $cond: [
             { $ifNull: [ "$lastMessage", false ] },
@@ -175,24 +182,17 @@ const getChats = async(req, res) => {
             null
           ]
         },
-        lastMessageEdited: {
-          $cond: [
-            { $ifNull: [ "$lastMessage", false ] },
-            "$lastMessage.lastMessageEdited",
-            false
-          ]
-        },
-        lastSeenMessageId: {
-          $getField: {
-            field: "lastSeenMessageId",
-            input: {
-              $getField: {
-                field: req.params.id,
-                input: "$readState"
-              }
-            }
-          }
-        }
+        // lastSeenMessageId: {
+        //   $getField: {
+        //     field: "lastSeenMessageId",
+        //     input: {
+        //       $getField: {
+        //         field: req.params.id,
+        //         input: "$readState"
+        //       }
+        //     }
+        //   }
+        // }
       }
     },
   ])
@@ -238,12 +238,13 @@ const sendChat = async (req, res) => {
     const userSocketIDs = req.app.get("userSocketIDs");
     const convoId = req.params.id;
     const message = req.body.message;
-    const receiverId = JSON.parse(req.body.receiverId);
     const senderId = req.user.id;
     const replyToId = req.body.replyToId || null;
+    // const receiverId = JSON.parse(req.body.receiverId);
+    let receiverId;
     let mentionUserIds = [];
 
-    if (!convoId || !senderId || !receiverId) {
+    if (!convoId || !senderId ) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
@@ -254,6 +255,14 @@ const sendChat = async (req, res) => {
     if (!chatConvoDB) {
       return res.status(404).json({ message: "Chat not Found" });
     }
+
+    // receiverId = chatConvoDB.members.filter((m) => String(m) !== String(req.user.id));
+    receiverId = chatConvoDB.members
+      .filter(m => String(m) !== String(req.user.id))
+      .map(m => String(m));
+
+    console.log("Receiver IDs:", receiverId);
+
     if (req.body.mentions) {
       try {
         mentionUserIds = JSON.parse(req.body.mentions);
@@ -318,8 +327,10 @@ const sendChat = async (req, res) => {
 
     // Send to receiver if online
     receiverId.forEach(receiver => {
-      const receiverSocket = userSocketIDs.get(receiver);
+      // const receiverSocket = userSocketIDs.get(receiver);
+      const receiverSocket = userSocketIDs.get(String(receiver));
       if (receiverSocket) {
+        console.log("Emitting newMessage to socket:", receiverSocket, "for receiverId:", receiver);
         io.to(receiverSocket).emit("newMessage", chat);
       } 
     });
@@ -413,6 +424,7 @@ const editMessage = async (req, res) => {
     const newText = (req.body.message || "").trim();
     let mentionUserIds = [];
     let mentions = [];
+    let fileUrlArray = [];
 
     if (!messageId) {
       return res.status(400).json({ message: "messageId is required" });
@@ -469,10 +481,16 @@ const editMessage = async (req, res) => {
       return res.status(400).json({ message: "Edit window expired. You can edit only within 15 minutes." });
     }
 
+    // Upload files to Supabase if present
+    if (req.files && req.files.length > 0) {
+      const prefix = `${senderId}_${convoId}`;
+      fileUrlArray = await uploadMultipleFiles(req.files, 'chat-files', prefix);
+    }
     chat.message.text = newText;
     chat.isEdited = true;
     chat.editedAt = new Date();
     chat.mentions = mentions;
+    chat.message.url = fileUrlArray.length > 0 ? fileUrlArray : undefined;
     await chat.save();
 
     chat.receiverId.forEach((receiver) => {
