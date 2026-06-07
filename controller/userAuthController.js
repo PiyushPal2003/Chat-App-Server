@@ -21,6 +21,17 @@ function isValidSignupPassword(password) {
     return typeof password === "string" && /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8}$/.test(password);
 }
 
+function getRefreshCookieOptions() {
+    const isProduction = process.env.NODE_ENV === "production" || process.env.VERCEL;
+    return {
+        httpOnly: true,
+        secure: Boolean(isProduction),
+        sameSite: isProduction ? "None" : "Lax",
+        path: '/',
+        maxAge: 7 * 24 * 60 * 60 * 1000,
+    };
+}
+
 
 // Controller for user authentication
 const authRegister = async(req, res) => {
@@ -64,13 +75,7 @@ const authRegister = async(req, res) => {
 
         user.save()
             .then(() => {
-                res.cookie('chatRefreshToken', refreshToken, {
-                    httpOnly: true,
-                    secure: false,
-                    sameSite: 'LAX', 
-                    path: '/',
-                    maxage: 7 * 24 * 60 * 60 * 1000
-                });
+                res.cookie('chatRefreshToken', refreshToken, getRefreshCookieOptions());
 
                 io.emit('NEW_USER', user);
                 return res.status(200).json({message: "User Created Successfully", 
@@ -114,13 +119,7 @@ const googleauth = async(req, res) => {
 
         user.save()
             .then(() => {
-                res.cookie('chatRefreshToken', refreshToken, {
-                    httpOnly: true,
-                    secure: false,
-                    sameSite: 'LAX', 
-                    path: '/',
-                    maxAge: 7 * 24 * 60 * 60 * 1000
-                });
+                res.cookie('chatRefreshToken', refreshToken, getRefreshCookieOptions());
                 
                 io.emit('NEW_USER', user);
 
@@ -177,13 +176,7 @@ const authLogin = async(req, res)=>{
             const refreshToken = jwt.sign({ name: user.name, email: user.email, photo: user.profilePhoto, id : user._id, type: 'Refresh' }, process.env.JWT_SECRET, {expiresIn: '7d'});
             const accessToken = jwt.sign({ name: user.name, email: user.email, photo: user.profilePhoto, id: user._id, type: 'Access' }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
-            res.cookie('chatRefreshToken', refreshToken, {
-                httpOnly: true,
-                secure: false,
-                sameSite: 'LAX', 
-                path: '/',
-                maxAge: 7 * 24 * 60 * 60 * 1000
-            });
+            res.cookie('chatRefreshToken', refreshToken, getRefreshCookieOptions());
 
             return res.status(200).json({ message: 'Login successful', token: accessToken, user: {
                 name: user.name,
@@ -214,13 +207,7 @@ const googleLoginAuth = async(req,res)=>{
         const refreshToken = jwt.sign({ name: user.name, email: user.email, photo: user.profilePhoto, id : user._id, type: 'Refresh' }, process.env.JWT_SECRET, {expiresIn: '7d'});
         const accessToken = jwt.sign({ name: payload.name, email: payload.email, photo: payload.picture, id: user._id, type: 'Access' }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
-        res.cookie('chatRefreshToken', refreshToken, {
-            httpOnly: true,
-            secure: false,
-            sameSite: 'LAX', 
-            path: '/',
-            maxAge: 7 * 24 * 60 * 60 * 1000
-        });
+        res.cookie('chatRefreshToken', refreshToken, getRefreshCookieOptions());
 
         return res.status(200).json({ message: 'Login successful', token: accessToken, user: {
                 name: user.name,

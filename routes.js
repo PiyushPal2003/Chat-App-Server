@@ -10,8 +10,7 @@ const userChatsController = require('./controller/userChatsController');
 
 const verifyToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
-  const authCookie = req.cookies['chatRefreshToken'];
-  if (!authHeader || !authCookie) {
+  if (!authHeader) {
     return res.status(401).json({ message: "No access token provided" });
   }
 
