@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 var jwt = require('jsonwebtoken');
-const upload = require('multer')({ dest: "temp/" });
+const os = require('os');
+const upload = require('multer')({ dest: os.tmpdir() });
 const userAuthController = require('./controller/userAuthController');
 const userDetailsController = require('./controller/userDetailsController');
 const userChatsController = require('./controller/userChatsController');

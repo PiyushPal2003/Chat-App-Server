@@ -62,7 +62,7 @@ async function uploadFile(file, folder, customName = null) {
       upsert: false  // Don't overwrite if exists
     });
 
-  // Delete temp file (multer stores uploads in temp/)
+  // Delete temp file from Multer's disk storage.
   fs.unlinkSync(file.path);
 
   if (error) {
