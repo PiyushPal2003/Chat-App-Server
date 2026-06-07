@@ -17,12 +17,22 @@ async function verifyGoogleToken(token) {
   return payload; // contains email, name, picture, etc.
 }
 
+function isValidSignupPassword(password) {
+    return typeof password === "string" && /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8}$/.test(password);
+}
+
 
 // Controller for user authentication
 const authRegister = async(req, res) => {
     const io = req.app.get("io");
     if(req.body.type == 'Sign up') {
         let publicUrl;
+
+        if (!isValidSignupPassword(req.body.password)) {
+            return res.status(400).json({
+                error: "Password must be exactly 8 characters and include uppercase, lowercase, and a number."
+            });
+        }
 
         const usr = await userdb.findOne({email: req.body.email})
         if(usr){
