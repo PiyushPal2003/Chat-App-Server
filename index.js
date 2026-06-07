@@ -50,7 +50,8 @@ app.set("userSocketIDs", userSocketIDs);
 
 io.on("connection", (socket) => {
   console.log("A user connected:", socket.id);
-  userSocketIDs.set(socket.user._id.toString(), socket.id);
+  const userId = socket.user._id.toString();
+  userSocketIDs.set(userId, socket.id);
   console.log("Current User socket IDs are:", userSocketIDs);
   io.emit("USER_CONNECTED", Object.fromEntries(userSocketIDs));
 
@@ -120,7 +121,9 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", () => {
     console.log("User disconnected:", socket.id);
-    userSocketIDs.delete(socket.user._id.toString());
+    if (userSocketIDs.get(userId) === socket.id) {
+      userSocketIDs.delete(userId);
+    }
     console.log("Current User socket IDs are:", userSocketIDs);
 
     socket.broadcast.emit("USER_DISCONNECTED", Object.fromEntries(userSocketIDs));
